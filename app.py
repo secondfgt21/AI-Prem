@@ -92,14 +92,27 @@ def order(
 ):
     return f"""
     <html>
-    <body style="font-family:sans-serif; text-align:center; padding-top:40px;">
-        <h2>Pesanan dibuat ✅</h2>
-        <p>Produk: {product_id}</p>
-        <p>Nama: {buyer_name}</p>
-        <p>Kontak: {buyer_contact}</p>
+    <body style="font-family:sans-serif;text-align:center;padding-top:40px;">
+        <h2>Pesanan berhasil dibuat ✅</h2>
 
-        <p><b>Silakan bayar via QRIS</b></p>
-        <p>Setelah bayar, admin akan verifikasi.</p>
+        <p><b>Produk:</b> {product_id}</p>
+        <p><b>Nama:</b> {buyer_name}</p>
+
+        <h3>Silakan Bayar via QRIS</h3>
+
+        <img src="https://ibb.co.com/LDBnFg3C" width="220"><br><br>
+
+        <p>Setelah bayar, kirim bukti ke WhatsApp:</p>
+
+        <a href="https://wa.me/6281317391284">
+            <button style="padding:10px 18px;font-size:16px;">
+                Kirim Bukti Pembayaran
+            </button>
+        </a>
+
+        <p style="margin-top:20px;font-size:13px;color:gray;">
+        Admin akan verifikasi & mengirim voucher otomatis.
+        </p>
     </body>
     </html>
     """
