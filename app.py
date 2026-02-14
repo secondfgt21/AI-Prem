@@ -3,51 +3,45 @@ import uuid
 import random
 from datetime import datetime
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from supabase import create_client, Client
 
 # ======================
 # ENV (Render -> Environment Variables)
 # ======================
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://oqhmnpakvdulkqovzbje.supabase.co")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "sb_publishable_dzS2aqj2QOXJwJbOu4QDGQ_HDk09Bfn")
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "gantidengan-tokenmu")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "ganti-tokenmu")
 
 if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    # Biar enak debug kalau env belum di-set
     print("WARNING: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum di-set")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
 app = FastAPI()
 
 # ======================
-# CONFIG PRODUK (kamu bilang ada 2 produk)
+# CONFIG PRODUK
 # ======================
 PRODUCTS = {
     "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000, "stock_label": "Stok: 12 tersedia"},
     "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000, "stock_label": "Stok: 8 tersedia"},
 }
 
-QR_IMAGE_URL = "https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-(1).png"
-
+# pakai direct image link yang tampil sebagai gambar
+QR_IMAGE_URL = "https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png"
 
 def rupiah(n: int) -> str:
-    # Format Rp 30,840
     return f"{n:,}"
-
 
 def require_admin(token: str | None) -> bool:
     return token == ADMIN_TOKEN
-
 
 # ======================
 # LANDING PAGE
 # ======================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    # list 2 produk
     cards = ""
     for pid, p in PRODUCTS.items():
         cards += f"""
@@ -114,7 +108,6 @@ def home():
     </html>
     """
 
-
 # ======================
 # CHECKOUT (buat order pending + nominal unik)
 # ======================
@@ -123,15 +116,13 @@ def checkout(product_id: str):
     if product_id not in PRODUCTS:
         return HTMLResponse("<h3>Produk tidak ditemukan</h3>", status_code=404)
 
-    base_price = PRODUCTS[product_id]["price"]
+    base_price = int(PRODUCTS[product_id]["price"])
     unique_code = random.randint(101, 999)
     total = base_price + unique_code
 
     order_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
 
-    # Simpan order ke Supabase
-    # Pastikan tabel orders punya kolom: id (uuid/text), product_id, amount_idr, status, created_at
     supabase.table("orders").insert({
         "id": order_id,
         "product_id": product_id,
@@ -224,7 +215,6 @@ def checkout(product_id: str):
     </html>
     """
 
-
 # ======================
 # STATUS ORDER
 # ======================
@@ -236,14 +226,11 @@ def status(order_id: str):
 
     order = res.data[0]
     st = order.get("status", "pending")
-    amount = order.get("amount_idr", 0)
+    amount = int(order.get("amount_idr", 0))
     pid = order.get("product_id", "")
 
     badge = "#f59e0b" if st == "pending" else "#22c55e" if st == "paid" else "#ef4444"
-
-    voucher_btn = ""
-    if st == "paid":
-        voucher_btn = f'<a class="btn" href="/voucher/{order_id}">Lihat Voucher</a>'
+    voucher_btn = f'<a class="btn" href="/voucher/{order_id}">Lihat Voucher</a>' if st == "paid" else ""
 
     return f"""
     <html>
@@ -261,7 +248,7 @@ def status(order_id: str):
       <div class="box">
         <h2>Status Order</h2>
         <div class="muted">Produk: <b>{pid}</b></div>
-        <div class="muted">Nominal: <b>Rp {rupiah(int(amount))}</b></div>
+        <div class="muted">Nominal: <b>Rp {rupiah(amount)}</b></div>
         <div style="margin-top:12px;">Status: <span class="badge">{st.upper()}</span></div>
         {voucher_btn}
         <div class="muted" style="margin-top:12px;">Refresh halaman ini setelah admin verifikasi.</div>
@@ -270,9 +257,8 @@ def status(order_id: str):
     </html>
     """
 
-
 # ======================
-# HALAMAN ADMIN (LIST ORDER PENDING)
+# ADMIN PANEL
 # ======================
 @app.get("/admin", response_class=HTMLResponse)
 def admin(token: str | None = None):
@@ -290,15 +276,11 @@ def admin(token: str | None = None):
         amt = int(o.get("amount_idr") or 0)
         created = o.get("created_at", "")
 
-        action = ""
-        if st == "pending":
-            action = f"""
-            <form method="post" action="/admin/verify/{oid}?token={token}" style="margin:0;">
-              <button class="vbtn" type="submit">VERIFIKASI</button>
-            </form>
-            """
-        else:
-            action = f"<div class='done'>{st}</div>"
+        action = f"""
+        <form method="post" action="/admin/verify/{oid}?token={token}" style="margin:0;">
+          <button class="vbtn" type="submit">VERIFIKASI</button>
+        </form>
+        """ if st == "pending" else f"<div class='done'>{st}</div>"
 
         items += f"""
         <div class="row">
@@ -334,27 +316,14 @@ def admin(token: str | None = None):
     </html>
     """
 
-
-# ======================
-# AKSI VERIFIKASI ADMIN
-# ======================
 @app.post("/admin/verify/{order_id}")
 def admin_verify(order_id: str, token: str | None = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
 
-    # Update status -> paid
-    supabase.table("orders").update({
-        "status": "paid"
-    }).eq("id", order_id).execute()
-
-    # balik ke admin
+    supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
     return RedirectResponse(url=f"/admin?token={token}", status_code=303)
 
-
-# ======================
-# HALAMAN VOUCHER (sementara: belum ambil dari DB, step 2 nanti)
-# ======================
 @app.get("/voucher/{order_id}", response_class=HTMLResponse)
 def voucher(order_id: str):
     res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
@@ -365,23 +334,10 @@ def voucher(order_id: str):
     if order.get("status") != "paid":
         return HTMLResponse("<h3>Belum diverifikasi admin</h3><p>Silakan tunggu.</p>", status_code=400)
 
-    # Step 2 nanti: ambil voucher_code dari tabel vouchers dan tampilkan di sini.
-    return f"""
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1"/>
-      <style>
-        body{{font-family:Arial;background:#0f172a;color:white;text-align:center;padding:30px}}
-        .box{{background:#1e293b;padding:22px;border-radius:16px;display:inline-block;max-width:420px;width:100%}}
-        .muted{{opacity:.75}}
-      </style>
-    </head>
-    <body>
-      <div class="box">
-        <h2>Voucher</h2>
-        <div class="muted">Status: PAID ✅</div>
-        <p style="margin-top:14px;">(Step 2) Nanti voucher otomatis tampil di sini.</p>
-      </div>
-    </body>
-    </html>
+    return """
+    <html><body style="font-family:Arial;text-align:center;padding:40px;">
+      <h2>Voucher</h2>
+      <p>Status: PAID ✅</p>
+      <p>(Step 2) Nanti voucher otomatis tampil di sini.</p>
+    </body></html>
     """
