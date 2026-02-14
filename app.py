@@ -120,7 +120,7 @@ def checkout(product_id: str):
 
             <p>Scan QRIS:</p>
 
-            <img src="https://i.ibb.co/5XCB0jP5/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png" width="220">
+            <img src="https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-(1).png" width="220">
 
             <p class="note" style="margin-top:15px;">
             Setelah bayar, tunggu verifikasi otomatis.
