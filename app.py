@@ -26,8 +26,8 @@ app = FastAPI()
 # CONFIG PRODUK (kamu bilang ada 2 produk)
 # ======================
 PRODUCTS = {
-    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25.000, "stock_label": "Stok: 12 tersedia"},
-    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10.000, "stock_label": "Stok: 8 tersedia"},
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000, "stock_label": "Stok: 12 tersedia"},
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000, "stock_label": "Stok: 8 tersedia"},
 }
 
 QR_IMAGE_URL = "https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-(1).png"
