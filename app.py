@@ -43,7 +43,9 @@ def home():
             <p>Gemini AI Pro 1 Tahun</p>
             <h2>Rp 30.000</h2>
             <p>Stok: 12 tersedia</p>
-            <button onclick="alert('Fitur order segera aktif')">Beli Sekarang</button>
+            <a href="/checkout/gemini" style="text-decoration:none;">
+    <button>Beli Sekarang</button>
+</a>
         </div>
     </body>
     </html>
