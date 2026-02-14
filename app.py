@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+import random
 
 app = FastAPI()
-
 
 # ======================
 # HALAMAN UTAMA (LANDING)
@@ -64,6 +64,10 @@ def home():
 # ======================
 @app.get("/checkout/{product_id}", response_class=HTMLResponse)
 def checkout(product_id: str):
+    harga = 30000
+    kode_unik = random.randint(101, 999)
+    total = harga + kode_unik
+
     return f"""
     <html>
     <head>
@@ -81,10 +85,23 @@ def checkout(product_id: str):
                 padding:25px;
                 border-radius:15px;
                 display:inline-block;
+                max-width:340px;
             }}
             img {{
                 margin-top:15px;
                 border-radius:10px;
+                background:white;
+                padding:8px;
+            }}
+            .total {{
+                font-size:28px;
+                font-weight:bold;
+                color:#22c55e;
+                margin-top:10px;
+            }}
+            .note {{
+                opacity:.7;
+                font-size:13px;
             }}
         </style>
     </head>
@@ -94,14 +111,20 @@ def checkout(product_id: str):
             <h2>Pembayaran QRIS</h2>
             <p>Produk: <b>{product_id}</b></p>
 
-            <p>Silakan scan QRIS:</p>
+            <p>Total transfer:</p>
+            <div class="total">Rp {total:,}</div>
 
-            <img src="LINK_QRIS_KAMU" width="220"><br><br>
-
-            <p style="opacity:.7;">
-            Setelah bayar, tunggu verifikasi otomatis.
+            <p class="note">
+            termasuk kode unik untuk verifikasi otomatis
             </p>
 
+            <p>Scan QRIS:</p>
+
+            <img src="https://i.ibb.co/5XCB0jP5/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png" width="220">
+
+            <p class="note" style="margin-top:15px;">
+            Setelah bayar, tunggu verifikasi otomatis.
+            </p>
         </div>
 
     </body>
