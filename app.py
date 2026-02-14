@@ -66,53 +66,44 @@ def home():
 def checkout(product_id: str):
     return f"""
     <html>
-    <body style="font-family:sans-serif; text-align:center; padding-top:40px;">
-        <h2>Checkout</h2>
-        <p>Produk: {product_id}</p>
+    <head>
+        <title>Pembayaran</title>
+        <style>
+            body {{
+                font-family: Arial;
+                text-align:center;
+                background:#0f172a;
+                color:white;
+                padding-top:40px;
+            }}
+            .box {{
+                background:#1e293b;
+                padding:25px;
+                border-radius:15px;
+                display:inline-block;
+            }}
+            img {{
+                margin-top:15px;
+                border-radius:10px;
+            }}
+        </style>
+    </head>
+    <body>
 
-        <form method="post" action="/order">
-            <input type="hidden" name="product_id" value="{product_id}">
-            <input name="buyer_name" placeholder="Nama" required><br><br>
-            <input name="buyer_contact" placeholder="WhatsApp / Telegram" required><br><br>
-            <button type="submit">Lanjut Bayar</button>
-        </form>
-    </body>
-    </html>
-    """
+        <div class="box">
+            <h2>Pembayaran QRIS</h2>
+            <p>Produk: <b>{product_id}</b></p>
 
+            <p>Silakan scan QRIS:</p>
 
-# ======================
-# PROSES ORDER
-# ======================
-@app.post("/order", response_class=HTMLResponse)
-def order(
-    product_id: str = Form(...),
-    buyer_name: str = Form(...),
-    buyer_contact: str = Form(...)
-):
-    return f"""
-    <html>
-    <body style="font-family:sans-serif;text-align:center;padding-top:40px;">
-        <h2>Pesanan berhasil dibuat ✅</h2>
+            <img src="LINK_QRIS_KAMU" width="220"><br><br>
 
-        <p><b>Produk:</b> {product_id}</p>
-        <p><b>Nama:</b> {buyer_name}</p>
+            <p style="opacity:.7;">
+            Setelah bayar, tunggu verifikasi otomatis.
+            </p>
 
-        <h3>Silakan Bayar via QRIS</h3>
+        </div>
 
-        <img src="https://ibb.co.com/LDBnFg3C" width="220"><br><br>
-
-        <p>Setelah bayar, kirim bukti ke WhatsApp:</p>
-
-        <a href="https://wa.me/6281317391284">
-            <button style="padding:10px 18px;font-size:16px;">
-                Kirim Bukti Pembayaran
-            </button>
-        </a>
-
-        <p style="margin-top:20px;font-size:13px;color:gray;">
-        Admin akan verifikasi & mengirim voucher otomatis.
-        </p>
     </body>
     </html>
     """
