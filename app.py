@@ -1061,71 +1061,69 @@ def home():
         """
     html = HOME_HTML.substitute(cards=cards, year=now_utc().year)
     return HTMLResponse(html)
+    from fastapi import HTTPException
 
-@app.get("/checkout/{product_id}")
-def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1)):
+@app.post("/api/checkout")
+async def api_checkout(payload: dict = Body(...), request: Request = None):
     """
-    Buat order pending + nominal unik.
-    FIX: setelah dibuat, redirect ke /pay/{order_id} supaya refresh tidak bikin order baru.
-    Juga pakai cookie untuk lock order per produk (anti dobel).
+    Buat order dan kembalikan order_id + pay_url.
+    Payload: { "product_id": str, "qty": int }
     """
-    if product_id not in PRODUCTS:
-        return HTMLResponse("<h3>Produk tidak ditemukan</h3>", status_code=404)
+    try:
+        product_id = str(payload.get("product_id", "")).strip()
+        qty = int(payload.get("qty", 1))
 
-    # cek stok realtime
-    stock = get_stock_map().get(product_id, 0)
-    qty = int(qty or 1)
-    if qty < 1:
-        qty = 1
-    if stock <= 0:
-        return HTMLResponse("<h3>Stok habis</h3><p>Produk sedang kosong.</p>", status_code=400)
-    if qty > stock:
-        return HTMLResponse(f"<h3>Stok tidak cukup</h3><p>Maksimal {stock}.</p>", status_code=400)
+        if not product_id:
+            raise HTTPException(status_code=422, detail="product_id wajib diisi")
+        if qty < 1:
+            raise HTTPException(status_code=422, detail="qty minimal 1")
 
-    ip = _client_ip(request)
-    if not _rate_limit_checkout(ip):
-        return HTMLResponse("<h3>Terlalu banyak request</h3><p>Coba lagi beberapa menit.</p>", status_code=429)
+        if product_id not in PRODUCTS:
+            raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
 
-    # lock by cookie: kalau masih ada pending order yang belum expired, pakai itu
-    cookie_key = f"oid_{product_id}"
-    oid = request.cookies.get(cookie_key)
-    if oid:
-        try:
-            r = supabase.table("orders").select("*").eq("id", oid).limit(1).execute()
-            if r.data:
-                order = r.data[0]
-                order, expired = _ensure_not_expired(order)
-                if not expired and (order.get("status") or "").lower() == "pending":
-                    return RedirectResponse(url=f"/pay/{oid}", status_code=302)
-        except Exception:
-            pass
+        price = int(PRODUCTS[product_id].get("price", 0))
+        name = str(PRODUCTS[product_id].get("name", product_id))
+        amount = price * qty
 
-    base_price = int(PRODUCTS[product_id]["price"]) * int(qty)
-    unique_code = random.randint(101, 999)
-    total = base_price + unique_code
+        order_id = uuid.uuid4().hex[:12]
 
-    order_id = str(uuid.uuid4())
-    created_at = now_utc().isoformat()
+        # pay url (dipakai WP untuk redirect)
+        base = str(request.base_url).rstrip("/") if request else ""
+        pay_url = f"{base}/pay/{order_id}" if base else f"/pay/{order_id}"
 
-    ins = supabase.table("orders").insert(
-        {
-            "id": order_id,
+        order_obj = {
+            "order_id": order_id,
             "product_id": product_id,
-            "qty": int(qty),
-            "amount_idr": total,
-            "status": "pending",
-            "created_at": created_at,
-            "voucher_code": None,
+            "product_name": name,
+            "qty": qty,
+            "amount": amount,
+            "status": "UNPAID",
+            "created_at": now_utc().isoformat(),
         }
-    ).execute()
 
-    if not ins.data:
-        return HTMLResponse("<h3>Gagal membuat order</h3><p>Cek RLS / key / schema orders.</p>", status_code=500)
+        # ===== Simpan ke Supabase kalau ada =====
+        # kalau Supabase error, fallback ke memory biar tidak 500
+        saved_to_db = False
+        try:
+            if supabase is not None:
+                # pastikan tabel 'orders' ada di Supabase
+                # kolom minimal: order_id (text), product_id (text), qty (int), amount (int), status (text), created_at (timestamptz)
+                supabase.table("orders").insert(order_obj).execute()
+                saved_to_db = True
+        except Exception as db_err:
+            # fallback ke memory
+            saved_to_db = False
 
-    resp = RedirectResponse(url=f"/pay/{order_id}", status_code=302)
-    # cookie lock 15 menit
-    resp.set_cookie(cookie_key, order_id, max_age=ORDER_TTL_MINUTES * 60, httponly=True, samesite="lax")
-    return resp
+        if not saved_to_db:
+            ORDERS[order_id] = order_obj
+
+        return {"order_id": order_id, "pay_url": pay_url}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # penting: kasih detail biar ketahuan errornya
+        raise HTTPException(status_code=500, detail=f"checkout_error: {type(e).__name__}: {str(e)}")
 
 @app.get("/pay/{order_id}", response_class=HTMLResponse)
 def pay(order_id: str):
