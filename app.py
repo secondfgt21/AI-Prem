@@ -78,15 +78,15 @@ def claim_voucher_for_order(order_id: str, product_id: str) -> str | None:
 # ======================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    # build product cards
+    # build product cards (ONLY cards, no extra blocks inside grid)
     cards = ""
     for pid, p in PRODUCTS.items():
         cards += f"""
         <div class="p-card">
           <div class="p-top">
             <div class="p-title">{p["name"]}</div>
-<div style="font-size:11px;color:#22c55e;font-weight:bold;">TERLARIS</div>
             <div class="p-sub">{p.get("stock_label","")}</div>
+            <span class="hot">TERLARIS</span>
           </div>
 
           <div class="p-price">Rp {rupiah(int(p["price"]))}</div>
@@ -100,10 +100,6 @@ def home():
           <a class="btn primary" href="/checkout/{pid}">Beli Sekarang</a>
           <div class="p-note">Bayar QRIS → verifikasi admin → voucher/akses terkirim</div>
         </div>
-<div class="badge">⚡ Proses Cepat</div>
-  <div class="badge">💬 Support Aktif</div>
-  <div class="badge">⭐ Pelanggan Puas</div>
-</div>
         """
 
     return f"""
@@ -113,7 +109,8 @@ def home():
       <meta name="viewport" content="width=device-width, initial-scale=1"/>
       <style>
         :root {{
-          --bg: #0b1220;
+          --bg: #070b14;
+          --bg2: #0b1220;
           --panel: rgba(255,255,255,.06);
           --panel2: rgba(255,255,255,.08);
           --text: rgba(255,255,255,.92);
@@ -121,7 +118,8 @@ def home():
           --line: rgba(255,255,255,.12);
           --green: #22c55e;
           --blue: #38bdf8;
-          --shadow: 0 18px 40px rgba(0,0,0,.35);
+          --pink: #fb7185;
+          --shadow: 0 18px 40px rgba(0,0,0,.45);
           --radius: 18px;
         }}
         *{{box-sizing:border-box}}
@@ -129,16 +127,17 @@ def home():
           margin:0;
           font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
           background:
-            radial-gradient(900px 400px at 20% -10%, rgba(56,189,248,.25), transparent 60%),
-            radial-gradient(900px 420px at 80% 0%, rgba(34,197,94,.20), transparent 55%),
-            var(--bg);
+            radial-gradient(1200px 520px at 15% -10%, rgba(56,189,248,.22), transparent 58%),
+            radial-gradient(1200px 540px at 85% 0%, rgba(34,197,94,.18), transparent 58%),
+            radial-gradient(1000px 520px at 50% 120%, rgba(251,113,133,.10), transparent 55%),
+            linear-gradient(180deg, var(--bg), var(--bg2));
           color: var(--text);
         }}
         a{{color:inherit}}
         .wrap {{
-          max-width: 1040px;
+          max-width: 1100px;
           margin: 0 auto;
-          padding: 22px 16px 60px;
+          padding: 22px 16px 90px;
         }}
 
         /* Top bar */
@@ -148,21 +147,23 @@ def home():
           justify-content:space-between;
           gap:12px;
           margin-bottom:18px;
-          flex-wrap:wrap;
         }}
         .brand {{
           display:flex; align-items:center; gap:10px;
+          min-width: 0;
         }}
         .logo {{
-          width:38px; height:38px; border-radius:12px;
+          width:40px; height:40px; border-radius:14px;
           background: linear-gradient(135deg, rgba(56,189,248,.95), rgba(34,197,94,.95));
-          box-shadow: var(--shadow);
+          box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 18px 40px rgba(0,0,0,.45), 0 0 24px rgba(56,189,248,.18);
+          flex: 0 0 auto;
         }}
         .brand h1 {{
           font-size:16px; margin:0; letter-spacing:.2px;
         }}
         .brand .tag {{
           font-size:12px; color:var(--muted); margin-top:2px;
+          max-width: 46ch;
         }}
         .pill {{
           border:1px solid var(--line);
@@ -172,12 +173,13 @@ def home():
           font-size:12px;
           color:var(--muted);
           white-space:nowrap;
+          box-shadow: 0 0 0 1px rgba(255,255,255,.04) inset;
         }}
 
         /* Hero */
         .hero {{
           display:grid;
-          grid-template-columns: 1.25fr .75fr;
+          grid-template-columns: 1.1fr .9fr;
           gap: 14px;
           align-items:stretch;
           margin: 8px 0 18px;
@@ -194,8 +196,11 @@ def home():
         .hero-left:before {{
           content:"";
           position:absolute; inset:-2px;
-          background: radial-gradient(600px 220px at 30% 10%, rgba(56,189,248,.18), transparent 60%);
+          background:
+            radial-gradient(700px 260px at 28% 10%, rgba(56,189,248,.18), transparent 60%),
+            radial-gradient(700px 260px at 70% 40%, rgba(34,197,94,.14), transparent 55%);
           pointer-events:none;
+          filter: blur(.1px);
         }}
         .kicker {{
           display:inline-flex;
@@ -209,16 +214,16 @@ def home():
           border-radius:999px;
         }}
         .title {{
-          font-size:30px;
+          font-size:32px;
           margin: 12px 0 8px;
-          line-height:1.15;
+          line-height:1.12;
           letter-spacing:.2px;
         }}
         .subtitle {{
           color:var(--muted);
           font-size:14px;
-          line-height:1.5;
-          max-width: 58ch;
+          line-height:1.6;
+          max-width: 64ch;
         }}
         .hero-actions {{
           display:flex;
@@ -228,18 +233,21 @@ def home():
           flex-wrap:wrap;
         }}
         .btn {{
-          display:inline-block;
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
           padding: 12px 14px;
           border-radius: 12px;
           text-decoration:none;
-          font-weight: 700;
+          font-weight: 800;
           font-size:14px;
           border:1px solid transparent;
+          cursor:pointer;
         }}
         .btn.primary {{
           background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.72));
           color:#06210f;
-          box-shadow: 0 12px 24px rgba(34,197,94,.15);
+          box-shadow: 0 0 0 1px rgba(34,197,94,.18) inset, 0 14px 28px rgba(34,197,94,.18);
         }}
         .btn.ghost {{
           background: rgba(255,255,255,.04);
@@ -266,7 +274,7 @@ def home():
           padding: 16px;
           box-shadow: var(--shadow);
         }}
-        .steps-title {{font-weight:800; margin:0 0 10px; font-size:14px}}
+        .steps-title {{font-weight:900; margin:0 0 10px; font-size:14px}}
         .step {{
           display:flex;
           gap:10px;
@@ -279,7 +287,7 @@ def home():
         .num {{
           width:28px; height:28px; border-radius:10px;
           display:flex; align-items:center; justify-content:center;
-          font-weight:900;
+          font-weight:950;
           background: rgba(56,189,248,.18);
           border:1px solid rgba(56,189,248,.25);
           color: rgba(255,255,255,.92);
@@ -292,32 +300,43 @@ def home():
         .section-title {{
           margin: 18px 0 10px;
           font-size: 14px;
-          color: rgba(255,255,255,.85);
-          font-weight:900;
+          color: rgba(255,255,255,.86);
+          font-weight:950;
           letter-spacing:.2px;
         }}
         .grid {{
           display:grid;
-          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
           gap: 14px;
           align-items: stretch;
         }}
-
-.p-card {{
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: var(--shadow);
-  transition: transform .2s ease, box-shadow .2s ease;
-}}
-
-.p-card:hover {{
-  transform: translateY(-4px);
-  box-shadow: 0 20px 45px rgba(0,0,0,.45);
-}}
+        .p-card {{
+          position:relative;
+          background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.05));
+          border: 1px solid rgba(255,255,255,.12);
+          border-radius: var(--radius);
+          padding: 16px;
+          box-shadow: var(--shadow);
+          transition: transform .2s ease, box-shadow .2s ease;
+          overflow:hidden;
+          min-height: 260px;
+        }}
+        .p-card:before {{
+          content:"";
+          position:absolute; inset:-2px;
+          background: radial-gradient(700px 220px at 20% 0%, rgba(56,189,248,.10), transparent 60%);
+          pointer-events:none;
+        }}
+        .p-card:hover{{
+          transform: translateY(-4px);
+          box-shadow: 0 24px 55px rgba(0,0,0,.55);
+        }}
+        .p-top {{
+          position:relative;
+          padding-right: 88px;
+        }}
         .p-top .p-title {{
-          font-weight: 900;
+          font-weight: 950;
           font-size: 15px;
           margin-bottom: 4px;
         }}
@@ -325,8 +344,28 @@ def home():
           color: var(--muted);
           font-size: 12px;
         }}
+        .hot {{
+          position:absolute;
+          top: 0;
+          right: 0;
+          font-size: 11px;
+          font-weight: 950;
+          letter-spacing:.4px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          color: rgba(255,255,255,.92);
+          background: rgba(34,197,94,.12);
+          border: 1px solid rgba(34,197,94,.28);
+          box-shadow: 0 0 18px rgba(34,197,94,.18);
+          animation: hotPulse 1.8s ease-in-out infinite;
+        }}
+        @keyframes hotPulse {{
+          0%, 100% {{ transform: translateY(0); box-shadow: 0 0 18px rgba(34,197,94,.18); }}
+          50%      {{ transform: translateY(-1px); box-shadow: 0 0 28px rgba(34,197,94,.34); }}
+        }}
+
         .p-price {{
-          font-size: 22px;
+          font-size: 24px;
           font-weight: 950;
           margin: 12px 0 10px;
           letter-spacing: .2px;
@@ -354,7 +393,7 @@ def home():
         .trust {{
           margin-top: 16px;
           display:grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
           gap: 12px;
         }}
         .box {{
@@ -362,6 +401,7 @@ def home():
           border:1px solid var(--line);
           border-radius: var(--radius);
           padding: 14px;
+          box-shadow: 0 0 0 1px rgba(255,255,255,.03) inset;
         }}
         .box h3 {{
           margin:0 0 8px;
@@ -372,7 +412,7 @@ def home():
           margin:0;
           font-size: 12px;
           color: var(--muted);
-          line-height: 1.55;
+          line-height: 1.6;
         }}
         .box ul{{margin:0; padding-left:18px}}
 
@@ -391,12 +431,35 @@ def home():
           opacity:.7;
         }}
 
+        /* Floating WA */
+        .wa {{
+          position: fixed;
+          right: 18px;
+          bottom: 18px;
+          display:flex;
+          align-items:center;
+          gap:10px;
+          padding: 12px 14px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.70));
+          color: #06210f;
+          font-weight: 950;
+          text-decoration:none;
+          box-shadow: 0 18px 40px rgba(0,0,0,.45), 0 0 24px rgba(34,197,94,.22);
+          border: 1px solid rgba(255,255,255,.14);
+          z-index: 9999;
+        }}
+        .wa small {{
+          display:block;
+          font-weight: 800;
+          opacity:.85;
+        }}
+
         /* Mobile */
         @media (max-width: 860px) {{
           .hero {{grid-template-columns: 1fr;}}
-          .grid {{grid-template-columns: 1fr;}}
-          .trust {{grid-template-columns: 1fr;}}
-          .title {{font-size: 26px;}}
+          .title {{font-size: 28px;}}
+          .pill {{display:none;}}
         }}
       </style>
     </head>
@@ -406,7 +469,7 @@ def home():
         <div class="topbar">
           <div class="brand">
             <div class="logo"></div>
-            <div>
+            <div style="min-width:0">
               <h1>AI Premium Store</h1>
               <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
             </div>
@@ -433,6 +496,7 @@ def home():
               <div class="badge">✅ Status otomatis</div>
               <div class="badge">✅ Voucher 1x klik</div>
               <div class="badge">✅ Support after sales</div>
+              <div class="badge">✨ Dark neon glow</div>
             </div>
           </div>
 
@@ -462,14 +526,6 @@ def home():
           {cards}
         </div>
 
-        <div class="badges" style="margin-top:14px;">
-          <div class="badge">🔒 Pembayaran Aman</div>
-          <div class="badge">⚡ Proses Cepat</div>
-          <div class="badge">💬 Support Aktif</div>
-          <div class="badge">⭐ Pelanggan Puas</div>
-        </div>
-
-
         <div class="trust">
           <div class="box">
             <h3>Kenapa beli di sini?</h3>
@@ -493,6 +549,10 @@ def home():
           <div class="admin">Admin panel: <code>/admin?token=TOKEN</code></div>
         </div>
       </div>
+
+      <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noopener">
+        💬 <span>Chat Admin<br><small>Fast response</small></span>
+      </a>
     </body>
     </html>
     """
@@ -626,6 +686,19 @@ def status(order_id: str):
     amount = int(order.get("amount_idr", 0))
     pid = order.get("product_id", "")
 
+    # hitung countdown estimasi verifikasi (default 15 menit dari created_at)
+    VERIFY_WINDOW_SEC = 15 * 60
+    created_at = order.get("created_at")
+    seconds_left = VERIFY_WINDOW_SEC
+    try:
+        if created_at:
+            s = str(created_at).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(s)
+            elapsed = (datetime.utcnow() - dt.replace(tzinfo=None)).total_seconds()
+            seconds_left = max(0, int(VERIFY_WINDOW_SEC - elapsed))
+    except Exception:
+        seconds_left = VERIFY_WINDOW_SEC
+
     # kalau sudah paid, langsung lempar ke voucher (biar buyer gak nyasar)
     if st == "paid":
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=302)
@@ -636,18 +709,76 @@ def status(order_id: str):
     <html>
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <title>Status Order</title>
       <style>
-        body{{font-family:Arial;background:#0f172a;color:white;text-align:center;padding:30px}}
-        .box{{background:#1e293b;padding:22px;border-radius:16px;display:inline-block;max-width:360px;width:100%}}
-        .badge{{display:inline-block;padding:6px 10px;border-radius:999px;background:{badge};font-weight:bold}}
-        .muted{{opacity:.75;font-size:13px}}
+        :root {{
+          --bg: #0b1220;
+          --panel: rgba(255,255,255,.06);
+          --text: rgba(255,255,255,.92);
+          --muted: rgba(255,255,255,.70);
+          --line: rgba(255,255,255,.12);
+          --green:#22c55e;
+          --shadow: 0 18px 40px rgba(0,0,0,.45);
+        }}
+        body{{
+          margin:0;
+          font-family:Arial;
+          background:
+            radial-gradient(900px 420px at 20% -10%, rgba(56,189,248,.22), transparent 60%),
+            radial-gradient(900px 420px at 80% 0%, rgba(34,197,94,.18), transparent 55%),
+            var(--bg);
+          color:var(--text);
+          text-align:center;
+          padding:30px 14px;
+        }}
+        .box{{
+          background: var(--panel);
+          border:1px solid var(--line);
+          padding:22px;
+          border-radius:16px;
+          display:inline-block;
+          max-width:460px;
+          width:100%;
+          box-shadow:var(--shadow);
+        }}
+        .badge{{
+          display:inline-block;
+          padding:7px 12px;
+          border-radius:999px;
+          background:{badge};
+          font-weight:900;
+          letter-spacing:.3px;
+        }}
+        .muted{{opacity:.8;font-size:13px;line-height:1.55}}
+        .row{{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:10px}}
+        .kpi{{flex:1;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:10px}}
+        .kpi b{{display:block;font-size:12px;opacity:.85}}
+        .kpi span{{display:block;font-size:16px;font-weight:950;margin-top:4px}}
         .spin{{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-left:6px}}
         @keyframes spin{{to{{transform:rotate(360deg)}}}}
+
+        .wa {{
+          position: fixed;
+          right: 18px;
+          bottom: 18px;
+          display:flex;
+          align-items:center;
+          gap:10px;
+          padding: 12px 14px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.70));
+          color: #06210f;
+          font-weight: 950;
+          text-decoration:none;
+          box-shadow: 0 18px 40px rgba(0,0,0,.45), 0 0 24px rgba(34,197,94,.22);
+          border: 1px solid rgba(255,255,255,.14);
+          z-index: 9999;
+        }}
       </style>
     </head>
     <body>
       <div class="box">
-        <h2>Status Order</h2>
+        <h2 style="margin:0 0 8px">Status Order</h2>
         <div class="muted">Produk: <b>{pid}</b></div>
         <div class="muted">Nominal: <b>Rp {rupiah(amount)}</b></div>
 
@@ -656,13 +787,55 @@ def status(order_id: str):
           <span class="spin" title="mengecek otomatis"></span>
         </div>
 
+        <div class="row">
+          <div class="kpi">
+            <b>Countdown verifikasi</b>
+            <span id="cd">--:--</span>
+          </div>
+          <div class="kpi">
+            <b>Auto cek</b>
+            <span id="poll">2.5s</span>
+          </div>
+        </div>
+
         <div class="muted" style="margin-top:12px;">
-          Halaman ini akan otomatis berubah setelah admin verifikasi.
+          Halaman ini akan otomatis redirect ke voucher setelah admin verifikasi.
+        </div>
+
+        <div class="muted" id="hint" style="margin-top:10px;">
+          Jika sudah bayar tapi lama, klik tombol WhatsApp untuk konfirmasi.
         </div>
       </div>
 
+      <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noopener">💬 Chat Admin</a>
+
       <script>
+        let pollEveryMs = 2500;
+        let nextPoll = pollEveryMs;
+        let secondsLeft = {seconds_left};
+
+        function fmt(sec) {{
+          sec = Math.max(0, sec|0);
+          const m = String(Math.floor(sec/60)).padStart(2,'0');
+          const s = String(sec%60).padStart(2,'0');
+          return m+":"+s;
+        }}
+
+        function tick() {{
+          // countdown verifikasi (estimasi)
+          if (secondsLeft > 0) secondsLeft -= 1;
+          document.getElementById("cd").textContent = fmt(secondsLeft);
+
+          // countdown poll
+          nextPoll -= 1000;
+          if (nextPoll < 0) nextPoll = 0;
+          document.getElementById("poll").textContent = (nextPoll/1000).toFixed(1) + "s";
+        }}
+        setInterval(tick, 1000);
+        document.getElementById("cd").textContent = fmt(secondsLeft);
+
         async function poll() {{
+          nextPoll = pollEveryMs;
           try {{
             const r = await fetch("/api/order/{order_id}", {{cache:"no-store"}});
             if (!r.ok) return;
@@ -670,13 +843,13 @@ def status(order_id: str):
             if (!j.ok) return;
 
             if (j.status === "paid") {{
-              // langsung ke voucher
               window.location.href = "/voucher/{order_id}";
               return;
             }}
           }} catch (e) {{}}
         }}
-        setInterval(poll, 2500); // cek tiap 2.5 detik
+        setInterval(poll, pollEveryMs);
+        poll();
       </script>
     </body>
     </html>
