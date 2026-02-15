@@ -24,27 +24,20 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
-# CORS untuk WordPress / domain custom
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv('ALLOWED_ORIGINS','*').split(',') if o.strip()]
+# ===== CORS FIX (WAJIB) =====
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ['*'] else ['*'],
-    allow_credentials=False,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_origins=[
+        "https://ai-prem.onrender.com",
+        "https://ai-prem-12f0d56.ingress-earth.ewp.live",
+    ],
+    allow_origin_regex=r"https://.*\.ewp\.live",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
-
-
-# CORS untuk WordPress / domain custom
-ALLOWED_ORIGINS = [o.strip() for o in os.getenv('ALLOWED_ORIGINS','*').split(',') if o.strip()]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ['*'] else ['*'],
-    allow_credentials=False,
-    allow_methods=['*'],
-    allow_headers=['*'],
-)
-
 
 # ======================
 # CONFIG
