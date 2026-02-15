@@ -23,6 +23,28 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
+# CORS untuk WordPress / domain custom
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv('ALLOWED_ORIGINS','*').split(',') if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ['*'] else ['*'],
+    allow_credentials=False,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+
+# CORS untuk WordPress / domain custom
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv('ALLOWED_ORIGINS','*').split(',') if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS if ALLOWED_ORIGINS != ['*'] else ['*'],
+    allow_credentials=False,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+
+
 # ======================
 # CONFIG
 # ======================
@@ -122,31 +144,39 @@ def get_stock_map() -> Dict[str, int]:
         print("[STOCK] err:", e)
     return stock
 
-def claim_voucher_for_order(order_id: str, product_id: str) -> Optional[str]:
-    # ambil 1 voucher available utk product_id
+def claim_voucher_for_order(order_id: str, product_id: str, qty: int) -> Optional[str]:
+    """Ambil voucher sebanyak qty untuk product_id.
+    Simpan semua kode voucher ke orders.voucher_code dipisah newline.
+    """
+    qty = int(qty or 1)
+    if qty < 1:
+        qty = 1
+
     v = (
         supabase.table("vouchers")
         .select("id,code")
         .eq("product_id", product_id)
         .eq("status", "available")
         .order("id", desc=False)
-        .limit(1)
+        .limit(qty)
         .execute()
     )
 
-    if not v.data:
+    if not v.data or len(v.data) < qty:
         return None
 
-    voucher_id = v.data[0]["id"]
-    code = v.data[0]["code"]
+    ids = [row["id"] for row in v.data]
+    codes = [row["code"] for row in v.data]
+    codes_joined = "\n".join(codes)
 
-    # set voucher jadi used
-    supabase.table("vouchers").update({"status": "used"}).eq("id", voucher_id).execute()
+    # set voucher jadi used (batch)
+    supabase.table("vouchers").update({"status": "used"}).in_("id", ids).execute()
 
-    # set order jadi paid + simpan code voucher (kalau belum di-set)
-    supabase.table("orders").update({"status": "paid", "voucher_code": code}).eq("id", order_id).execute()
+    # set order jadi paid + simpan kode voucher
+    supabase.table("orders").update({"status": "paid", "voucher_code": codes_joined}).eq("id", order_id).execute()
 
-    return code
+    return codes_joined
+
 
 # ======================
 # Templates
@@ -951,6 +981,66 @@ ADMIN_HTML = Template(r"""<!doctype html>
 """)
 
 # ======================
+# API (untuk WordPress)
+# ======================
+@app.get("/api/products")
+def api_products():
+    stock = get_stock_map()
+    items = []
+    for pid, p in PRODUCTS.items():
+        items.append({
+            "id": pid,
+            "name": p["name"],
+            "price": int(p["price"]),
+            "stock": int(stock.get(pid, 0)),
+        })
+    return {"products": items}
+
+@app.post("/api/checkout")
+def api_checkout(payload: dict, request: Request):
+    """Buat order dan kembalikan pay_url.
+    Payload: {product_id: str, qty: int}
+    """
+    pid = (payload.get("product_id") or "").strip()
+    qty = int(payload.get("qty") or 1)
+    if qty < 1:
+        qty = 1
+    if pid not in PRODUCTS:
+        return {"ok": False, "error": "Produk tidak ditemukan"}
+
+    stock = get_stock_map().get(pid, 0)
+    if stock <= 0:
+        return {"ok": False, "error": "Stok habis"}
+    if qty > stock:
+        return {"ok": False, "error": f"Stok tidak cukup. Maks {stock}"}
+
+    ip = _client_ip(request)
+    if not _rate_limit_checkout(ip):
+        return {"ok": False, "error": "Terlalu banyak request. Coba lagi nanti."}
+
+    base_price = int(PRODUCTS[pid]["price"]) * qty
+    unique_code = random.randint(101, 999)
+    total = base_price + unique_code
+
+    order_id = str(uuid.uuid4())
+    created_at = now_utc().isoformat()
+
+    ins = supabase.table("orders").insert({
+        "id": order_id,
+        "product_id": pid,
+        "qty": int(qty),
+        "amount_idr": int(total),
+        "status": "pending",
+        "created_at": created_at,
+        "voucher_code": None,
+    }).execute()
+
+    if not ins.data:
+        return {"ok": False, "error": "Gagal membuat order"}
+
+    return {"ok": True, "order_id": order_id, "amount_idr": int(total), "pay_url": f"/pay/{order_id}"}
+
+# ======================
 # ROUTES
 # ======================
 @app.get("/", response_class=HTMLResponse)
@@ -979,7 +1069,7 @@ def home():
     return HTMLResponse(html)
 
 @app.get("/checkout/{product_id}")
-def checkout(product_id: str, request: Request):
+def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1)):
     """
     Buat order pending + nominal unik.
     FIX: setelah dibuat, redirect ke /pay/{order_id} supaya refresh tidak bikin order baru.
@@ -987,6 +1077,16 @@ def checkout(product_id: str, request: Request):
     """
     if product_id not in PRODUCTS:
         return HTMLResponse("<h3>Produk tidak ditemukan</h3>", status_code=404)
+
+    # cek stok realtime
+    stock = get_stock_map().get(product_id, 0)
+    qty = int(qty or 1)
+    if qty < 1:
+        qty = 1
+    if stock <= 0:
+        return HTMLResponse("<h3>Stok habis</h3><p>Produk sedang kosong.</p>", status_code=400)
+    if qty > stock:
+        return HTMLResponse(f"<h3>Stok tidak cukup</h3><p>Maksimal {stock}.</p>", status_code=400)
 
     ip = _client_ip(request)
     if not _rate_limit_checkout(ip):
@@ -1006,7 +1106,7 @@ def checkout(product_id: str, request: Request):
         except Exception:
             pass
 
-    base_price = int(PRODUCTS[product_id]["price"])
+    base_price = int(PRODUCTS[product_id]["price"]) * int(qty)
     unique_code = random.randint(101, 999)
     total = base_price + unique_code
 
@@ -1017,6 +1117,7 @@ def checkout(product_id: str, request: Request):
         {
             "id": order_id,
             "product_id": product_id,
+            "qty": int(qty),
             "amount_idr": total,
             "status": "pending",
             "created_at": created_at,
@@ -1250,7 +1351,7 @@ def admin_verify(order_id: str, token: Optional[str] = None):
                 if row.get("voucher_code"):
                     code = row["voucher_code"]
                 else:
-                    code = claim_voucher_for_order(order_id, row.get("product_id"))
+                    code = claim_voucher_for_order(order_id, row.get("product_id"), int(row.get("qty") or 1))
     except Exception as e:
         print("[ADMIN_VERIFY] err:", e)
 
