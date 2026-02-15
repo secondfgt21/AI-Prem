@@ -205,13 +205,7 @@ HOME_HTML = Template(r"""<!doctype html>
       white-space:nowrap;
     }
 
-    .hero{
-      display:grid;
-      grid-template-columns: 1.25fr .75fr;
-      gap:14px;
-      align-items:stretch;
-      margin: 8px 0 18px;
-    }
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin:8px 0 18px}
     .card{
       background:var(--glass);
       border:1px solid var(--line);
@@ -253,6 +247,7 @@ HOME_HTML = Template(r"""<!doctype html>
     }
     .btn:hover{transform: translateY(-2px)}
     .btn:hover:after{opacity:1}
+    .p .btn{margin-top:auto}
     .btn.primary{
       background:linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.70));
       color:#061a0d;
@@ -292,17 +287,9 @@ HOME_HTML = Template(r"""<!doctype html>
     .step span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 
     .section{margin:18px 0 10px;font-size:14px;font-weight:950;letter-spacing:.2px;color:rgba(255,255,255,.86)}
-    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:stretch}
 
-    .p{
-      background:var(--glass2);
-      border:1px solid var(--line);
-      border-radius:var(--r);
-      padding:16px;
-      box-shadow:var(--shadow);
-      transition: transform .2s ease, box-shadow .2s ease;
-      position:relative; overflow:hidden;
-    }
+    .p{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:transform .2s ease, box-shadow .2s ease;display:flex;flex-direction:column;min-height:260px}
     .p:hover{
       transform: translateY(-4px);
       box-shadow: 0 24px 50px rgba(0,0,0,.50);
@@ -317,7 +304,7 @@ HOME_HTML = Template(r"""<!doctype html>
     .ptitle{font-weight:950;font-size:15px;margin-bottom:4px}
     .psub{font-size:12px;color:var(--muted)}
     .price{font-size:22px;font-weight:950;margin:12px 0 10px;letter-spacing:.2px}
-    .feats{display:grid;gap:6px;margin-bottom:12px}
+    .feats{display:grid;gap:6px;margin-bottom:12px;flex:1}
     .feat{font-size:12px;color:rgba(255,255,255,.86);
       background:rgba(255,255,255,.03);
       border:1px solid rgba(255,255,255,.08);
@@ -394,8 +381,7 @@ HOME_HTML = Template(r"""<!doctype html>
     .wa small{font-weight:800;opacity:.8}
 
     /* Responsive */
-    @media (max-width: 920px){
-      .hero{grid-template-columns:1fr}
+    @media (max-width: 920px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.title{font-size:26px}}
       .grid{grid-template-columns:1fr}
       .title{font-size:26px}
     }
