@@ -8,6 +8,7 @@ from string import Template
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client, Client
 
 # ======================
