@@ -397,8 +397,7 @@ HOME_HTML = Template(r"""<!doctype html>
           <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
         </div>
       </div>
-      <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis • <span id="vis">...</span> online</div>
-    </div>
+      </div>
 
     <div class="hero">
       <div class="card heroL">
