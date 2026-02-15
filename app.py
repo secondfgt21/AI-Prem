@@ -74,72 +74,416 @@ def claim_voucher_for_order(order_id: str, product_id: str) -> str | None:
 
 
 # ======================
-# LANDING PAGE
+# LANDING PAGE (PRO)
 # ======================
 @app.get("/", response_class=HTMLResponse)
 def home():
+    # build product cards
     cards = ""
     for pid, p in PRODUCTS.items():
         cards += f"""
-        <div class="card">
-            <h1>{p["name"]}</h1>
-            <h2>Rp {rupiah(p["price"])}</h2>
-            <p style="opacity:.8">{p["stock_label"]}</p>
-            <a href="/checkout/{pid}" class="btn">Beli Sekarang</a>
+        <div class="p-card">
+          <div class="p-top">
+            <div class="p-title">{p["name"]}</div>
+<div style="font-size:11px;color:#22c55e;font-weight:bold;">TERLARIS</div>
+            <div class="p-sub">{p.get("stock_label","")}</div>
+          </div>
+
+          <div class="p-price">Rp {rupiah(int(p["price"]))}</div>
+
+          <div class="p-feats">
+            <div class="feat">✅ Aktivasi cepat</div>
+            <div class="feat">✅ Garansi sesuai produk</div>
+            <div class="feat">✅ Support after sales</div>
+          </div>
+
+          <a class="btn primary" href="/checkout/{pid}">Beli Sekarang</a>
+          <div class="p-note">Bayar QRIS → verifikasi admin → voucher/akses terkirim</div>
         </div>
+        <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
+  <div class="badge">🔒 Pembayaran Aman</div>
+  <div class="badge">⚡ Proses Cepat</div>
+  <div class="badge">💬 Support Aktif</div>
+  <div class="badge">⭐ Pelanggan Puas</div>
+</div>
         """
 
     return f"""
     <html>
     <head>
-        <title>AI Premium Store</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1"/>
-        <style>
-            body {{
-                font-family: Arial;
-                background:#0f172a;
-                color:white;
-                text-align:center;
-                padding:30px;
-            }}
-            .wrap {{
-                display:grid;
-                gap:18px;
-                max-width:820px;
-                margin:0 auto;
-            }}
-            .card {{
-                background:#1e293b;
-                padding:22px;
-                border-radius:15px;
-                box-shadow:0 10px 25px rgba(0,0,0,0.35);
-            }}
-            .btn {{
-                display:inline-block;
-                background:#22c55e;
-                padding:12px 18px;
-                color:white;
-                font-size:16px;
-                border-radius:10px;
-                text-decoration:none;
-                margin-top:10px;
-            }}
-            .topnote {{
-                opacity:.8;
-                margin-bottom:20px;
-                font-size:14px;
-            }}
-        </style>
+      <title>AI Premium Store</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <style>
+        :root {{
+          --bg: #0b1220;
+          --panel: rgba(255,255,255,.06);
+          --panel2: rgba(255,255,255,.08);
+          --text: rgba(255,255,255,.92);
+          --muted: rgba(255,255,255,.70);
+          --line: rgba(255,255,255,.12);
+          --green: #22c55e;
+          --blue: #38bdf8;
+          --shadow: 0 18px 40px rgba(0,0,0,.35);
+          --radius: 18px;
+        }}
+        *{{box-sizing:border-box}}
+        body {{
+          margin:0;
+          font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+          background:
+            radial-gradient(900px 400px at 20% -10%, rgba(56,189,248,.25), transparent 60%),
+            radial-gradient(900px 420px at 80% 0%, rgba(34,197,94,.20), transparent 55%),
+            var(--bg);
+          color: var(--text);
+        }}
+        a{{color:inherit}}
+        .wrap {{
+          max-width: 1040px;
+          margin: 0 auto;
+          padding: 22px 16px 60px;
+        }}
+
+        /* Top bar */
+        .topbar {{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+          margin-bottom:18px;
+        }}
+        .brand {{
+          display:flex; align-items:center; gap:10px;
+        }}
+        .logo {{
+          width:38px; height:38px; border-radius:12px;
+          background: linear-gradient(135deg, rgba(56,189,248,.95), rgba(34,197,94,.95));
+          box-shadow: var(--shadow);
+        }}
+        .brand h1 {{
+          font-size:16px; margin:0; letter-spacing:.2px;
+        }}
+        .brand .tag {{
+          font-size:12px; color:var(--muted); margin-top:2px;
+        }}
+        .pill {{
+          border:1px solid var(--line);
+          background: rgba(255,255,255,.04);
+          padding:10px 12px;
+          border-radius:999px;
+          font-size:12px;
+          color:var(--muted);
+          white-space:nowrap;
+        }}
+
+        /* Hero */
+        .hero {{
+          display:grid;
+          grid-template-columns: 1.25fr .75fr;
+          gap: 14px;
+          align-items:stretch;
+          margin: 8px 0 18px;
+        }}
+        .hero-left {{
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 20px;
+          box-shadow: var(--shadow);
+          position:relative;
+          overflow:hidden;
+        }}
+        .hero-left:before {{
+          content:"";
+          position:absolute; inset:-2px;
+          background: radial-gradient(600px 220px at 30% 10%, rgba(56,189,248,.18), transparent 60%);
+          pointer-events:none;
+        }}
+        .kicker {{
+          display:inline-flex;
+          gap:8px;
+          align-items:center;
+          font-size:12px;
+          color:var(--muted);
+          border:1px solid var(--line);
+          background: rgba(255,255,255,.03);
+          padding:8px 10px;
+          border-radius:999px;
+        }}
+        .title {{
+          font-size:30px;
+          margin: 12px 0 8px;
+          line-height:1.15;
+          letter-spacing:.2px;
+        }}
+        .subtitle {{
+          color:var(--muted);
+          font-size:14px;
+          line-height:1.5;
+          max-width: 58ch;
+        }}
+        .hero-actions {{
+          display:flex;
+          gap:10px;
+          align-items:center;
+          margin-top:14px;
+          flex-wrap:wrap;
+        }}
+        .btn {{
+          display:inline-block;
+          padding: 12px 14px;
+          border-radius: 12px;
+          text-decoration:none;
+          font-weight: 700;
+          font-size:14px;
+          border:1px solid transparent;
+        }}
+        .btn.primary {{
+          background: linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.72));
+          color:#06210f;
+          box-shadow: 0 12px 24px rgba(34,197,94,.15);
+        }}
+        .btn.ghost {{
+          background: rgba(255,255,255,.04);
+          border-color: var(--line);
+          color: var(--text);
+        }}
+        .badges {{
+          display:flex; flex-wrap:wrap; gap:8px;
+          margin-top:14px;
+        }}
+        .badge {{
+          font-size:12px;
+          color: var(--muted);
+          border:1px solid var(--line);
+          background: rgba(255,255,255,.03);
+          padding: 8px 10px;
+          border-radius: 999px;
+        }}
+
+        .hero-right {{
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 16px;
+          box-shadow: var(--shadow);
+        }}
+        .steps-title {{font-weight:800; margin:0 0 10px; font-size:14px}}
+        .step {{
+          display:flex;
+          gap:10px;
+          padding:10px;
+          border-radius:14px;
+          background: rgba(255,255,255,.03);
+          border: 1px solid rgba(255,255,255,.08);
+          margin-bottom:10px;
+        }}
+        .num {{
+          width:28px; height:28px; border-radius:10px;
+          display:flex; align-items:center; justify-content:center;
+          font-weight:900;
+          background: rgba(56,189,248,.18);
+          border:1px solid rgba(56,189,248,.25);
+          color: rgba(255,255,255,.92);
+          flex: 0 0 auto;
+        }}
+        .step b{{display:block; font-size:13px}}
+        .step span{{display:block; font-size:12px; color:var(--muted); margin-top:2px}}
+
+        /* Products */
+        .section-title {{
+          margin: 18px 0 10px;
+          font-size: 14px;
+          color: rgba(255,255,255,.85);
+          font-weight:900;
+          letter-spacing:.2px;
+        }}
+        .grid {{
+          display:grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }}
+        .p-card {{
+          background: var(--panel2);
+          border: 1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 16px;
+          box-shadow: var(--shadow);
+          transition: transform .2s ease, box-shadow .2s ease;
+}
+.p-card:hover{
+  transform: translateY(-4px);
+  box-shadow: 0 20px 45px rgba(0,0,0,.45);
+}
+        }}
+        .p-top .p-title {{
+          font-weight: 900;
+          font-size: 15px;
+          margin-bottom: 4px;
+        }}
+        .p-top .p-sub {{
+          color: var(--muted);
+          font-size: 12px;
+        }}
+        .p-price {{
+          font-size: 22px;
+          font-weight: 950;
+          margin: 12px 0 10px;
+          letter-spacing: .2px;
+        }}
+        .p-feats {{
+          display:grid;
+          gap: 6px;
+          margin-bottom: 12px;
+        }}
+        .feat {{
+          font-size: 12px;
+          color: rgba(255,255,255,.86);
+          background: rgba(255,255,255,.03);
+          border: 1px solid rgba(255,255,255,.08);
+          padding: 8px 10px;
+          border-radius: 12px;
+        }}
+        .p-note {{
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--muted);
+        }}
+
+        /* Trust + FAQ */
+        .trust {{
+          margin-top: 16px;
+          display:grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }}
+        .box {{
+          background: rgba(255,255,255,.04);
+          border:1px solid var(--line);
+          border-radius: var(--radius);
+          padding: 14px;
+        }}
+        .box h3 {{
+          margin:0 0 8px;
+          font-size: 13px;
+          font-weight: 950;
+        }}
+        .box p, .box li {{
+          margin:0;
+          font-size: 12px;
+          color: var(--muted);
+          line-height: 1.55;
+        }}
+        .box ul{{margin:0; padding-left:18px}}
+
+        .footer {{
+          margin-top: 18px;
+          color: rgba(255,255,255,.55);
+          font-size: 12px;
+          display:flex;
+          justify-content:space-between;
+          flex-wrap:wrap;
+          gap:10px;
+          border-top: 1px solid rgba(255,255,255,.10);
+          padding-top: 14px;
+        }}
+        .admin {{
+          opacity:.7;
+        }}
+
+        /* Mobile */
+        @media (max-width: 860px) {{
+          .hero {{grid-template-columns: 1fr;}}
+          .grid {{grid-template-columns: 1fr;}}
+          .trust {{grid-template-columns: 1fr;}}
+          .title {{font-size: 26px;}}
+        }}
+      </style>
     </head>
+
     <body>
-        <h2>AI Premium Store</h2>
-        <div class="topnote">Pilih produk → bayar QRIS → tunggu verifikasi</div>
-        <div class="wrap">
-            {cards}
+      <div class="wrap">
+        <div class="topbar">
+          <div class="brand">
+            <div class="logo"></div>
+            <div>
+              <h1>AI Premium Store</h1>
+              <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
+            </div>
+          </div>
+          <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis</div>
         </div>
-        <div style="opacity:.55;font-size:12px;margin-top:20px;">
-            Admin panel: /admin?token=TOKEN
+
+        <div class="hero">
+          <div class="hero-left">
+            <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga jelas <span style="opacity:.5">•</span> ✅ Auto voucher</div>
+            <div class="title">Beli akses AI premium dengan proses rapi & cepat.</div>
+            <div class="subtitle">
+              Pilih produk → bayar QRIS → admin verifikasi → sistem otomatis kirim voucher/akses.
+              Cocok untuk kerja, kuliah, riset, coding, dan konten.
+            </div>
+
+            <div class="hero-actions">
+              <a class="btn primary" href="#produk">Lihat Produk</a>
+              <a class="btn ghost" href="#cara">Cara Beli</a>
+            </div>
+
+            <div class="badges">
+              <div class="badge">✅ Pembayaran QRIS</div>
+              <div class="badge">✅ Status otomatis</div>
+              <div class="badge">✅ Voucher 1x klik</div>
+              <div class="badge">✅ Support after sales</div>
+            </div>
+          </div>
+
+          <div class="hero-right" id="cara">
+            <div class="steps-title">Cara beli (3 langkah)</div>
+            <div class="step">
+              <div class="num">1</div>
+              <div><b>Pilih produk</b><span>Klik “Beli Sekarang” di produk yang kamu mau.</span></div>
+            </div>
+            <div class="step">
+              <div class="num">2</div>
+              <div><b>Bayar QRIS</b><span>Transfer sesuai nominal (termasuk kode unik).</span></div>
+            </div>
+            <div class="step">
+              <div class="num">3</div>
+              <div><b>Verifikasi & voucher</b><span>Admin verifikasi → voucher tampil otomatis.</span></div>
+            </div>
+
+            <div style="margin-top:10px; font-size:12px; color:var(--muted);">
+              Tip: setelah bayar, buka halaman status order untuk auto-redirect ke voucher.
+            </div>
+          </div>
         </div>
+
+        <div class="section-title" id="produk">Produk tersedia</div>
+        <div class="grid">
+          {cards}
+        </div>
+
+        <div class="trust">
+          <div class="box">
+            <h3>Kenapa beli di sini?</h3>
+            <ul>
+              <li>Proses jelas: checkout → status → voucher</li>
+              <li>Nominal unik memudahkan verifikasi</li>
+              <li>Voucher tersimpan di database (lebih rapi)</li>
+            </ul>
+          </div>
+          <div class="box">
+            <h3>FAQ singkat</h3>
+            <p><b>Q:</b> Setelah bayar, berapa lama?<br/>
+               <b>A:</b> Tergantung antrian admin. Status akan berubah otomatis setelah diverifikasi.</p>
+            <p style="margin-top:8px;"><b>Q:</b> Voucher habis?<br/>
+               <b>A:</b> Sistem akan menampilkan info stok habis. Admin bisa tambah stok kapan saja.</p>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div>© {datetime.utcnow().year} AI Premium Store</div>
+          <div class="admin">Admin panel: <code>/admin?token=TOKEN</code></div>
+        </div>
+      </div>
     </body>
     </html>
     """
@@ -493,6 +837,22 @@ def voucher(order_id: str):
           Simpan kode ini. Jangan dibagikan ke orang lain.
         </div>
       </div>
+      <a href="https://wa.me/6281317391284" target="_blank"
+style="
+position:fixed;
+bottom:18px;
+right:18px;
+background:#22c55e;
+color:white;
+padding:14px 16px;
+border-radius:50px;
+font-weight:bold;
+text-decoration:none;
+box-shadow:0 8px 20px rgba(0,0,0,.3);
+z-index:999;
+">
+💬 Chat Admin
+</a>
     </body>
     </html>
     """)
