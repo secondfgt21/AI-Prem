@@ -4,7 +4,7 @@ import random
 from datetime import datetime
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from supabase import create_client, Client
 
 # ======================
@@ -264,7 +264,7 @@ def checkout(product_id: str):
 # ======================
 @app.get("/status/{order_id}", response_class=HTMLResponse)
 def status(order_id: str):
-    res = supabase.table("orders").select("id,product_id,amount_idr,status").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
 
@@ -273,8 +273,11 @@ def status(order_id: str):
     amount = int(order.get("amount_idr", 0))
     pid = order.get("product_id", "")
 
+    # kalau sudah paid, langsung lempar ke voucher (biar buyer gak nyasar)
+    if st == "paid":
+        return RedirectResponse(url=f"/voucher/{order_id}", status_code=302)
+
     badge = "#f59e0b" if st == "pending" else "#22c55e" if st == "paid" else "#ef4444"
-    voucher_btn = f'<a class="btn" href="/voucher/{order_id}">Lihat Voucher</a>' if st == "paid" else ""
 
     return f"""
     <html>
@@ -284,8 +287,9 @@ def status(order_id: str):
         body{{font-family:Arial;background:#0f172a;color:white;text-align:center;padding:30px}}
         .box{{background:#1e293b;padding:22px;border-radius:16px;display:inline-block;max-width:360px;width:100%}}
         .badge{{display:inline-block;padding:6px 10px;border-radius:999px;background:{badge};font-weight:bold}}
-        .btn{{display:inline-block;margin-top:14px;padding:10px 14px;border-radius:10px;text-decoration:none;background:#334155;color:white}}
         .muted{{opacity:.75;font-size:13px}}
+        .spin{{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-left:6px}}
+        @keyframes spin{{to{{transform:rotate(360deg)}}}}
       </style>
     </head>
     <body>
@@ -293,10 +297,34 @@ def status(order_id: str):
         <h2>Status Order</h2>
         <div class="muted">Produk: <b>{pid}</b></div>
         <div class="muted">Nominal: <b>Rp {rupiah(amount)}</b></div>
-        <div style="margin-top:12px;">Status: <span class="badge">{st.upper()}</span></div>
-        {voucher_btn}
-        <div class="muted" style="margin-top:12px;">Refresh halaman ini setelah admin verifikasi.</div>
+
+        <div style="margin-top:12px;">
+          Status: <span id="st" class="badge">{st.upper()}</span>
+          <span class="spin" title="mengecek otomatis"></span>
+        </div>
+
+        <div class="muted" style="margin-top:12px;">
+          Halaman ini akan otomatis berubah setelah admin verifikasi.
+        </div>
       </div>
+
+      <script>
+        async function poll() {{
+          try {{
+            const r = await fetch("/api/order/{order_id}", {{cache:"no-store"}});
+            if (!r.ok) return;
+            const j = await r.json();
+            if (!j.ok) return;
+
+            if (j.status === "paid") {{
+              // langsung ke voucher
+              window.location.href = "/voucher/{order_id}";
+              return;
+            }}
+          }} catch (e) {{}}
+        }}
+        setInterval(poll, 2500); // cek tiap 2.5 detik
+      </script>
     </body>
     </html>
     """
