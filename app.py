@@ -78,13 +78,14 @@ def claim_voucher_for_order(order_id: str, product_id: str) -> str | None:
 # ======================
 @app.get("/", response_class=HTMLResponse)
 def home():
-    # build product cards (HANYA kartu produk, jangan sisipkan badge section di dalam grid)
+    # build product cards
     cards = ""
     for pid, p in PRODUCTS.items():
         cards += f"""
         <div class="p-card">
           <div class="p-top">
             <div class="p-title">{p["name"]}</div>
+<div style="font-size:11px;color:#22c55e;font-weight:bold;">TERLARIS</div>
             <div class="p-sub">{p.get("stock_label","")}</div>
           </div>
 
@@ -99,6 +100,10 @@ def home():
           <a class="btn primary" href="/checkout/{pid}">Beli Sekarang</a>
           <div class="p-note">Bayar QRIS → verifikasi admin → voucher/akses terkirim</div>
         </div>
+<div class="badge">⚡ Proses Cepat</div>
+  <div class="badge">💬 Support Aktif</div>
+  <div class="badge">⭐ Pelanggan Puas</div>
+</div>
         """
 
     return f"""
@@ -131,7 +136,7 @@ def home():
         }}
         a{{color:inherit}}
         .wrap {{
-          max-width: 1100px;
+          max-width: 1040px;
           margin: 0 auto;
           padding: 22px 16px 60px;
         }}
@@ -147,13 +152,11 @@ def home():
         }}
         .brand {{
           display:flex; align-items:center; gap:10px;
-          min-width: 240px;
         }}
         .logo {{
           width:38px; height:38px; border-radius:12px;
           background: linear-gradient(135deg, rgba(56,189,248,.95), rgba(34,197,94,.95));
           box-shadow: var(--shadow);
-          flex: 0 0 auto;
         }}
         .brand h1 {{
           font-size:16px; margin:0; letter-spacing:.2px;
@@ -204,7 +207,6 @@ def home():
           background: rgba(255,255,255,.03);
           padding:8px 10px;
           border-radius:999px;
-          flex-wrap:wrap;
         }}
         .title {{
           font-size:30px;
@@ -216,7 +218,7 @@ def home():
           color:var(--muted);
           font-size:14px;
           line-height:1.5;
-          max-width: 60ch;
+          max-width: 58ch;
         }}
         .hero-actions {{
           display:flex;
@@ -294,26 +296,26 @@ def home():
           font-weight:900;
           letter-spacing:.2px;
         }}
-        /* AUTO-FIT biar rapih dari HP sampai Desktop besar */
         .grid {{
           display:grid;
           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-          gap: 12px;
+          gap: 14px;
           align-items: stretch;
         }}
 
-        .p-card {{
-          background: var(--panel2);
-          border: 1px solid var(--line);
-          border-radius: var(--radius);
-          padding: 16px;
-          box-shadow: var(--shadow);
-          transition: transform .2s ease, box-shadow .2s ease;
-        }}
-        .p-card:hover {{
-          transform: translateY(-4px);
-          box-shadow: 0 20px 45px rgba(0,0,0,.45);
-        }}
+.p-card {{
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform .2s ease, box-shadow .2s ease;
+}}
+
+.p-card:hover {{
+  transform: translateY(-4px);
+  box-shadow: 0 20px 45px rgba(0,0,0,.45);
+}}
         .p-top .p-title {{
           font-weight: 900;
           font-size: 15px;
@@ -346,22 +348,6 @@ def home():
           margin-top: 10px;
           font-size: 12px;
           color: var(--muted);
-        }}
-
-        /* Global trust badges (SEKALI saja, bukan per-card) */
-        .trust-badges {{
-          margin-top: 12px;
-          display:grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 10px;
-        }}
-        .tbadge {{
-          border: 1px solid var(--line);
-          background: rgba(255,255,255,.03);
-          border-radius: 14px;
-          padding: 10px 12px;
-          color: rgba(255,255,255,.86);
-          font-size: 12px;
         }}
 
         /* Trust + FAQ */
@@ -401,14 +387,16 @@ def home():
           border-top: 1px solid rgba(255,255,255,.10);
           padding-top: 14px;
         }}
-        .admin {{ opacity:.7; }}
+        .admin {{
+          opacity:.7;
+        }}
 
         /* Mobile */
         @media (max-width: 860px) {{
           .hero {{grid-template-columns: 1fr;}}
+          .grid {{grid-template-columns: 1fr;}}
           .trust {{grid-template-columns: 1fr;}}
           .title {{font-size: 26px;}}
-          .pill {{width: 100%; text-align:center;}}
         }}
       </style>
     </head>
@@ -474,13 +462,13 @@ def home():
           {cards}
         </div>
 
-        <!-- badge/trust SEKALI saja (tidak merusak grid produk) -->
-        <div class="trust-badges" aria-label="Keunggulan">
-          <div class="tbadge">🔒 Pembayaran Aman</div>
-          <div class="tbadge">⚡ Proses Cepat</div>
-          <div class="tbadge">💬 Support Aktif</div>
-          <div class="tbadge">⭐ Pelanggan Puas</div>
+        <div class="badges" style="margin-top:14px;">
+          <div class="badge">🔒 Pembayaran Aman</div>
+          <div class="badge">⚡ Proses Cepat</div>
+          <div class="badge">💬 Support Aktif</div>
+          <div class="badge">⭐ Pelanggan Puas</div>
         </div>
+
 
         <div class="trust">
           <div class="box">
