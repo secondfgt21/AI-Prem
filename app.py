@@ -298,23 +298,24 @@ def home():
           letter-spacing:.2px;
         }}
         .grid {{
-          display:grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-        }}
-        .p-card {{
-          background: var(--panel2);
-          border: 1px solid var(--line);
-          border-radius: var(--radius);
-          padding: 16px;
-          box-shadow: var(--shadow);
-          transition: transform .2s ease, box-shadow .2s ease;
-        }}
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}}
 
-        .p-card:hover{{
-          transform: translateY(-4px);
-          box-shadow: 0 20px 45px rgba(0,0,0,.45);
-        }}
+.p-card {{
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: transform .2s ease, box-shadow .2s ease;
+}}
+
+.p-card:hover {{
+  transform: translateY(-4px);
+  box-shadow: 0 20px 45px rgba(0,0,0,.45);
+}}
         .p-top .p-title {{
           font-weight: 900;
           font-size: 15px;
