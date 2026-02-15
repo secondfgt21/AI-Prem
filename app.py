@@ -14,16 +14,11 @@ from supabase import create_client, Client
 # ======================
 # ENV (Render -> Environment Variables)
 # ======================
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "ganti-tokenmu")
-
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    print("WARNING: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum di-set / tidak terbaca")
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-app = FastAPI()
-
+supabase: Optional[Client] = None
+if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+else:
+    print("WARNING: SUPABASE env belum di-set, checkout akan pakai memory fallback")
 # ===== CORS FIX (WAJIB) =====
 from fastapi.middleware.cors import CORSMiddleware
 
