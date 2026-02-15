@@ -378,32 +378,42 @@ def admin_verify(order_id: str, token: str | None = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
 
-    # ambil order
+    # Ambil order
     res = supabase.table("orders").select("id,product_id,status").eq("id", order_id).limit(1).execute()
     if not res.data:
         return PlainTextResponse("Order not found", status_code=404)
 
     order = res.data[0]
-    pid = order.get("product_id", "")
-    st = order.get("status")
+    pid = order.get("product_id")
+    st  = order.get("status")
 
-    # kalau sudah paid, langsung ke voucher
+    print("[ADMIN_VERIFY] before:", order_id, st, pid)
+
+    # Kalau sudah paid -> langsung ke voucher
     if st == "paid":
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
 
-    # coba claim voucher + set paid
-    try:
-        code = claim_voucher_for_order(order_id, pid)
-        if code is None:
-            # voucher habis -> tetap set paid, voucher_code null
-            supabase.table("orders").update({"status": "paid", "voucher_code": None}).eq("id", order_id).execute()
-    except Exception as e:
-        # kalau ada error, minimal set paid dulu biar buyer tidak pending terus
-        supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
-        return PlainTextResponse(f"Error saat assign voucher: {e}", status_code=500)
+    # 1) UPDATE ke PAID
+    upd = supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
+    print("[ADMIN_VERIFY] update_resp:", upd.data)
+
+    # 2) Re-check status biar pasti
+    chk = supabase.table("orders").select("status").eq("id", order_id).limit(1).execute()
+    new_st = (chk.data[0]["status"] if chk.data else None)
+    print("[ADMIN_VERIFY] after:", order_id, new_st)
+
+    # Kalau masih bukan paid, berarti update gagal (biasanya RLS / key)
+    if new_st != "paid":
+        return HTMLResponse(
+            f"<h3>Gagal verifikasi</h3><p>Status masih: {new_st}</p><p>Cek Render logs untuk detail.</p>",
+            status_code=500
+        )
+
+    # 3) Claim voucher (sesuaikan struktur table vouchers kamu: pakai kolom status)
+    rpc = supabase.rpc("claim_voucher", {"p_order_id": order_id, "p_product_id": pid}).execute()
+    print("[ADMIN_VERIFY] claim_voucher rpc:", rpc.data)
 
     return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
-
 
 # ======================
 # VOUCHER PAGE (buyer lihat kode)
