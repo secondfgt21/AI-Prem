@@ -21,6 +21,20 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 # ======================
+# LIVE VISITOR COUNTER (simple in-memory)
+# NOTE: counts are approximate (reset on restart / multi-instance)
+# ======================
+VISITOR_TTL_SECONDS = 300  # 5 menit dianggap "aktif"
+VISITORS_LAST_SEEN: dict[str, float] = {}
+
+
+def _prune_visitors(now_ts: float) -> None:
+    dead = [k for k, t in VISITORS_LAST_SEEN.items() if now_ts - t > VISITOR_TTL_SECONDS]
+    for k in dead:
+        VISITORS_LAST_SEEN.pop(k, None)
+
+
+# ======================
 # CONFIG PRODUK
 # ======================
 PRODUCTS = {
@@ -85,7 +99,7 @@ def home():
         <div class="p-card">
           <div class="p-top">
             <div class="p-title">{p["name"]}</div>
-            <div class="p-sub">{p.get("stock_label","")}</div>
+            <div class="p-sub"><span class="stock skeleton" id="stock-{pid}">Memuat stok…</span></div>
             <span class="hot">TERLARIS</span>
           </div>
 
@@ -389,6 +403,19 @@ def home():
           color: var(--muted);
         }}
 
+
+        .btn.primary{ position:relative; overflow:hidden; }
+        .btn.primary:after{
+          content:"";
+          position:absolute; inset:-2px;
+          background: radial-gradient(220px 90px at 30% 0%, rgba(255,255,255,.20), transparent 55%),
+                      radial-gradient(240px 120px at 70% 0%, rgba(56,189,248,.18), transparent 60%);
+          opacity:.0;
+          transition: opacity .25s ease;
+          pointer-events:none;
+        }
+        .btn.primary:hover:after{ opacity:.85; }
+
         /* Trust + FAQ */
         .trust {{
           margin-top: 16px;
@@ -455,6 +482,61 @@ def home():
           opacity:.85;
         }}
 
+
+        /* Effects */
+        html{{scroll-behavior:smooth;}}
+        .glass{{
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+        }}
+        .p-card, .hero-left, .hero-right, .box{{
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+        }}
+        .p-card{{ position:relative; overflow:hidden; }}
+        .p-card:before{{
+          content:"";
+          position:absolute; inset:-2px;
+          background: radial-gradient(420px 180px at 20% 0%, rgba(56,189,248,.18), transparent 60%),
+                      radial-gradient(420px 180px at 80% 0%, rgba(34,197,94,.14), transparent 60%);
+          opacity:.7;
+          pointer-events:none;
+          transition: opacity .25s ease, transform .25s ease;
+        }}
+        .p-card:hover:before{{ opacity:1; transform: scale(1.02); }}
+        .p-card:hover{{ box-shadow: 0 22px 60px rgba(0,0,0,.55); }}
+
+        /* Shimmer / skeleton */
+        .skeleton{{
+          position:relative;
+          display:inline-block;
+          min-width: 110px;
+          height: 16px;
+          border-radius: 999px;
+          background: rgba(255,255,255,.08);
+          color: rgba(255,255,255,.0);
+          overflow:hidden;
+          vertical-align: middle;
+        }}
+        .skeleton:after{{
+          content:"";
+          position:absolute; top:0; left:-60%;
+          height:100%; width:60%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent);
+          animation: shimmer 1.1s infinite;
+        }}
+        @keyframes shimmer{{ to{{ left:120%; }} }}
+
+        /* TERLARIS badge animation */
+        .hot{{
+          animation: hotPulse 1.5s ease-in-out infinite;
+          box-shadow: 0 10px 25px rgba(34,197,94,.14);
+        }}
+        @keyframes hotPulse{{
+          0%,100%{{ transform: translateY(0) scale(1); filter: drop-shadow(0 0 0 rgba(34,197,94,0)); }}
+          50%{{ transform: translateY(-1px) scale(1.03); filter: drop-shadow(0 0 10px rgba(34,197,94,.35)); }}
+        }}
+
         /* Mobile */
         @media (max-width: 860px) {{
           .hero {{grid-template-columns: 1fr;}}
@@ -465,7 +547,24 @@ def home():
     </head>
 
     <body>
-      <div class="wrap">
+      
+      <div id="toast" style="display:none; position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:9999;
+        background:rgba(34,197,94,.18); border:1px solid rgba(34,197,94,.30); color:#d1fae5;
+        padding:12px 14px; border-radius:14px; box-shadow:0 18px 40px rgba(0,0,0,.45); backdrop-filter: blur(10px);">
+        ✅ Voucher berhasil dikirim
+      </div>
+
+      <div id="success" style="display:none; position:fixed; inset:0; z-index:9998; background:rgba(2,6,23,.55); backdrop-filter: blur(6px);
+        align-items:center; justify-content:center;">
+        <div style="background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:22px; padding:22px 20px; width:min(420px,92vw);
+          text-align:center; box-shadow:0 30px 80px rgba(0,0,0,.55);">
+          <div style="width:64px;height:64px;border-radius:20px;margin:0 auto 10px; display:flex;align-items:center;justify-content:center;
+            background:rgba(34,197,94,.18); border:1px solid rgba(34,197,94,.35); font-size:34px;">✅</div>
+          <div style="font-weight:900; font-size:18px;">Berhasil diverifikasi</div>
+          <div style="opacity:.75; margin-top:6px; font-size:13px;">Voucher kamu sudah siap. Silakan salin kodenya.</div>
+        </div>
+      </div>
+<div class="wrap">
         <div class="topbar">
           <div class="brand">
             <div class="logo"></div>
@@ -474,7 +573,7 @@ def home():
               <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
             </div>
           </div>
-          <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis</div>
+          <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis • 👀 <span id='vc' class='skeleton'>...</span> online</div>
         </div>
 
         <div class="hero">
@@ -666,7 +765,45 @@ def checkout(product_id: str):
             <div class="muted" style="margin-top:10px;">
                 Setelah bayar, tunggu admin verifikasi.
             </div>
-        </div>
+        
+        <script>
+          async function refreshStock(){{
+            try{{
+              const r = await fetch('/api/stock', {{cache:'no-store'}});
+              const j = await r.json();
+              if(!j.ok) return;
+              const stock = j.stock || {{}};
+              for(const pid in stock){{
+                const el = document.getElementById('stock-' + pid);
+                if(!el) continue;
+                el.classList.remove('skeleton');
+                el.style.color = 'rgba(255,255,255,.70)';
+                el.textContent = 'Stok: ' + stock[pid] + ' tersedia';
+              }}
+            }}catch(e){{}}
+          }}
+
+          async function pingVisit(){{
+            try{{
+              const vid = (document.cookie.match(/(?:^|; )vid=([^;]+)/)||[])[1];
+              const r = await fetch('/api/visit' + (vid ? ('?vid=' + encodeURIComponent(vid)) : ''), {{cache:'no-store'}});
+              const j = await r.json();
+              if(!j.ok) return;
+              const vc = document.getElementById('vc');
+              if(vc){{
+                vc.classList.remove('skeleton');
+                vc.style.color = 'rgba(255,255,255,.78)';
+                vc.textContent = j.active;
+              }}
+            }}catch(e){{}}
+          }}
+
+          refreshStock();
+          pingVisit();
+          setInterval(refreshStock, 8000);
+          setInterval(pingVisit, 15000);
+        </script>
+</div>
     </body>
     </html>
     """
@@ -843,7 +980,7 @@ def status(order_id: str):
             if (!j.ok) return;
 
             if (j.status === "paid") {{
-              window.location.href = "/voucher/{order_id}";
+              window.location.href = "/voucher/{order_id}?sent=1";
               return;
             }}
           }} catch (e) {{}}
@@ -945,7 +1082,7 @@ def admin_verify(order_id: str, token: str | None = None):
 
     # Kalau sudah paid -> langsung ke voucher
     if st == "paid":
-        return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+        return RedirectResponse(url=f"/voucher/{order_id}?sent=1", status_code=303)
 
     # 1) UPDATE ke PAID
     upd = supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
@@ -967,13 +1104,13 @@ def admin_verify(order_id: str, token: str | None = None):
     rpc = supabase.rpc("claim_voucher", {"p_order_id": order_id, "p_product_id": pid}).execute()
     print("[ADMIN_VERIFY] claim_voucher rpc:", rpc.data)
 
-    return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+    return RedirectResponse(url=f"/voucher/{order_id}?sent=1", status_code=303)
 
 # ======================
 # VOUCHER PAGE (buyer lihat kode)
 # ======================
 @app.get("/voucher/{order_id}", response_class=HTMLResponse)
-def voucher(order_id: str):
+def voucher(order_id: str, sent: str | None = None):
     res = supabase.table("orders").select("status,product_id,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
@@ -1035,6 +1172,22 @@ z-index:999;
 ">
 💬 Chat Admin
 </a>
+    
+      <script>
+        (function(){{
+          const params = new URLSearchParams(window.location.search);
+          const sent = params.get('sent');
+          if(sent === '1'){{
+            const toast = document.getElementById('toast');
+            const success = document.getElementById('success');
+            if(toast){{ toast.style.display = 'block'; setTimeout(()=>toast.style.display='none', 3200); }}
+            if(success){{
+              success.style.display = 'flex';
+              setTimeout(()=>{{ success.style.display='none'; }}, 1400);
+            }}
+          }}
+        }})();
+      </script>
     </body>
     </html>
     """)
