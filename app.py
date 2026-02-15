@@ -28,14 +28,17 @@ PRODUCTS = {
     "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000, "stock_label": "Stok: 8 tersedia"},
 }
 
-# pakai direct image link yang tampil sebagai gambar
+# Direct image link (pastikan link ini benar-benar tampil sebagai gambar)
 QR_IMAGE_URL = "https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png"
+
 
 def rupiah(n: int) -> str:
     return f"{n:,}"
 
+
 def require_admin(token: str | None) -> bool:
     return token == ADMIN_TOKEN
+
 
 # ======================
 # LANDING PAGE
@@ -47,7 +50,7 @@ def home():
         cards += f"""
         <div class="card">
             <h1>{p["name"]}</h1>
-            <h2>Rp {rupiah(p["price"])}</h2>
+            <h2>Rp {rupiah(int(p["price"]))}</h2>
             <p style="opacity:.8">{p["stock_label"]}</p>
             <a href="/checkout/{pid}" class="btn">Beli Sekarang</a>
         </div>
@@ -108,6 +111,7 @@ def home():
     </html>
     """
 
+
 # ======================
 # CHECKOUT (buat order pending + nominal unik)
 # ======================
@@ -123,10 +127,11 @@ def checkout(product_id: str):
     order_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
 
+    # Simpan order
     supabase.table("orders").insert({
         "id": order_id,
         "product_id": product_id,
-        "amount_idr": total,
+        "amount_idr": int(total),
         "status": "pending",
         "created_at": now,
         "voucher_code": None
@@ -196,7 +201,7 @@ def checkout(product_id: str):
             <div class="muted">Produk: <b>{PRODUCTS[product_id]["name"]}</b></div>
 
             <div style="margin-top:12px;">Total transfer:</div>
-            <div class="total">Rp {rupiah(total)}</div>
+            <div class="total">Rp {rupiah(int(total))}</div>
             <div class="muted">termasuk kode unik untuk verifikasi</div>
 
             <div style="margin-top:12px;">Scan QRIS:</div>
@@ -215,18 +220,19 @@ def checkout(product_id: str):
     </html>
     """
 
+
 # ======================
 # STATUS ORDER
 # ======================
 @app.get("/status/{order_id}", response_class=HTMLResponse)
 def status(order_id: str):
-    res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("id,product_id,amount_idr,status").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
 
     order = res.data[0]
     st = order.get("status", "pending")
-    amount = int(order.get("amount_idr", 0))
+    amount = int(order.get("amount_idr") or 0)
     pid = order.get("product_id", "")
 
     badge = "#f59e0b" if st == "pending" else "#22c55e" if st == "paid" else "#ef4444"
@@ -257,15 +263,18 @@ def status(order_id: str):
     </html>
     """
 
+
 # ======================
-# ADMIN PANEL
+# ADMIN PANEL (LIST ORDER)
 # ======================
 @app.get("/admin", response_class=HTMLResponse)
 def admin(token: str | None = None):
     if not require_admin(token):
         return HTMLResponse("<h3>Unauthorized</h3>", status_code=401)
 
-    res = supabase.table("orders").select("*").order("created_at", desc=True).limit(50).execute()
+    res = supabase.table("orders").select("id,product_id,amount_idr,status,created_at,voucher_code") \
+        .order("created_at", desc=True).limit(50).execute()
+
     rows = res.data or []
 
     items = ""
@@ -275,12 +284,20 @@ def admin(token: str | None = None):
         pid = o.get("product_id", "")
         amt = int(o.get("amount_idr") or 0)
         created = o.get("created_at", "")
+        vcode = o.get("voucher_code")
 
-        action = f"""
-        <form method="post" action="/admin/verify/{oid}?token={token}" style="margin:0;">
-          <button class="vbtn" type="submit">VERIFIKASI</button>
-        </form>
-        """ if st == "pending" else f"<div class='done'>{st}</div>"
+        if st == "pending":
+            action = f"""
+            <form method="post" action="/admin/verify/{oid}?token={token}" style="margin:0;">
+              <button class="vbtn" type="submit">VERIFIKASI + KIRIM VOUCHER</button>
+            </form>
+            """
+        else:
+            # paid
+            action = f"""
+            <a class="linkbtn" href="/voucher/{oid}">Buka Voucher</a>
+            <div class="muted" style="margin-top:6px;">{("Voucher: " + vcode) if vcode else "Voucher: (habis / belum ada)"}</div>
+            """
 
         items += f"""
         <div class="row">
@@ -299,34 +316,60 @@ def admin(token: str | None = None):
       <meta name="viewport" content="width=device-width, initial-scale=1"/>
       <style>
         body{{font-family:Arial;background:#0f172a;color:white;padding:20px}}
-        .box{{max-width:900px;margin:0 auto}}
+        .box{{max-width:980px;margin:0 auto}}
         .row{{background:#1e293b;padding:14px;border-radius:14px;margin-bottom:10px;display:flex;gap:12px;align-items:center;justify-content:space-between}}
         .muted{{opacity:.7;font-size:12px;word-break:break-all}}
         .vbtn{{background:#22c55e;border:none;color:white;padding:10px 12px;border-radius:10px;cursor:pointer;font-weight:bold}}
-        .done{{opacity:.8}}
+        .linkbtn{{display:inline-block;background:#334155;color:white;padding:10px 12px;border-radius:10px;text-decoration:none;font-weight:bold}}
       </style>
     </head>
     <body>
       <div class="box">
         <h2>Admin Panel</h2>
-        <div style="opacity:.75;margin-bottom:12px;">Klik VERIFIKASI untuk mengubah order menjadi PAID.</div>
+        <div style="opacity:.75;margin-bottom:12px;">Klik tombol untuk verifikasi + otomatis assign voucher lalu redirect ke halaman voucher.</div>
         {items if items else "<div style='opacity:.7'>Belum ada order</div>"}
       </div>
     </body>
     </html>
     """
 
+
+# ======================
+# ADMIN VERIFY (1 KLIK: PAID + CLAIM VOUCHER)
+# ======================
 @app.post("/admin/verify/{order_id}")
 def admin_verify(order_id: str, token: str | None = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
 
-    supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
-    return RedirectResponse(url=f"/admin?token={token}", status_code=303)
+    # ambil order
+    res = supabase.table("orders").select("id,product_id,status").eq("id", order_id).limit(1).execute()
+    if not res.data:
+        return PlainTextResponse("Order not found", status_code=404)
 
+    order = res.data[0]
+    product_id = order.get("product_id")
+    status = order.get("status")
+
+    # kalau sudah paid, langsung ke voucher
+    if status == "paid":
+        return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+
+    # panggil RPC: set paid + claim voucher + isi voucher_code
+    supabase.rpc("claim_voucher", {
+        "p_order_id": order_id,
+        "p_product_id": product_id
+    }).execute()
+
+    return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+
+
+# ======================
+# HALAMAN VOUCHER
+# ======================
 @app.get("/voucher/{order_id}", response_class=HTMLResponse)
 def voucher(order_id: str):
-    res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("status,product_id,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
 
@@ -334,10 +377,46 @@ def voucher(order_id: str):
     if order.get("status") != "paid":
         return HTMLResponse("<h3>Belum diverifikasi admin</h3><p>Silakan tunggu.</p>", status_code=400)
 
-    return """
-    <html><body style="font-family:Arial;text-align:center;padding:40px;">
-      <h2>Voucher</h2>
-      <p>Status: PAID ✅</p>
-      <p>(Step 2) Nanti voucher otomatis tampil di sini.</p>
-    </body></html>
-    """
+    code = order.get("voucher_code")
+
+    if not code:
+        return HTMLResponse("""
+        <html><body style="font-family:Arial;background:#0f172a;color:white;text-align:center;padding:40px">
+          <h2>Voucher</h2>
+          <p>Status: PAID ✅</p>
+          <p style="opacity:.8">Maaf, stok voucher untuk produk ini sedang habis.</p>
+        </body></html>
+        """)
+
+    # escape sederhana untuk dipakai di JS
+    safe_code_js = str(code).replace("\\", "\\\\").replace("'", "\\'").replace("\n", "")
+
+    return HTMLResponse(f"""
+    <html>
+    <head>
+      <meta name="viewport" content="width=device-width, initial-scale=1"/>
+      <style>
+        body{{font-family:Arial;background:#0f172a;color:white;text-align:center;padding:30px}}
+        .box{{background:#1e293b;padding:22px;border-radius:16px;display:inline-block;max-width:420px;width:100%}}
+        .code{{margin:14px auto;background:#0b1220;padding:14px;border-radius:12px;font-size:18px;font-weight:bold;word-break:break-all}}
+        .btn{{display:inline-block;margin-top:12px;padding:10px 14px;border-radius:10px;text-decoration:none;background:#22c55e;color:white;font-weight:bold;border:none}}
+        .muted{{opacity:.75;font-size:13px}}
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <h2>Voucher</h2>
+        <div class="muted">Status: PAID ✅</div>
+        <div class="muted">Produk: <b>{order.get("product_id")}</b></div>
+
+        <div class="code" id="vcode">{code}</div>
+
+        <button class="btn" onclick="navigator.clipboard.writeText('{safe_code_js}')">Salin Voucher</button>
+
+        <div class="muted" style="margin-top:12px;">
+          Simpan kode ini. Jangan dibagikan ke orang lain.
+        </div>
+      </div>
+    </body>
+    </html>
+    """)
