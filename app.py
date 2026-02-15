@@ -27,8 +27,8 @@ app = FastAPI()
 # CONFIG
 # ======================
 PRODUCTS = {
-    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000},
-    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000},
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 29_000},
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 14_000},
 }
 
 QR_IMAGE_URL = os.getenv(
@@ -156,7 +156,7 @@ HOME_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>AI Premium Store</title>
+  <title>AI Premium</title>
   <style>
     :root{
       --bg:#070c18;
@@ -205,7 +205,20 @@ HOME_HTML = Template(r"""<!doctype html>
       white-space:nowrap;
     }
 
-    .hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin:8px 0 18px}
+    /* paksa layout tetap seperti mobile */
+.hero{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:14px;
+}
+
+/* batasi lebar halaman supaya tidak melebar di desktop */
+.container,
+.section,
+body > div {
+  max-width: 620px;
+  margin: 0 auto;
+}
     .card{
       background:var(--glass);
       border:1px solid var(--line);
@@ -393,28 +406,24 @@ HOME_HTML = Template(r"""<!doctype html>
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>AI Premium Store</h1>
-          <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
+          <h1>AI Premium</h1>
+          <div class="tag">Akses AI premium • Pembayaran QRIS • Proses Cepat</div>
         </div>
       </div>
-      </div>
+    </div>
 
     <div class="hero">
       <div class="card heroL">
-        <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga jelas <span style="opacity:.5">•</span> ✅ Auto voucher</div>
+        <div class="kicker">⚡ Fast Checkout <span style="opacity:.5">•</span> 📌 Harga Jelas <span style="opacity:.5">•</span> ✅ Auto Kirim</div>
         <div class="title">Beli akses AI premium dengan proses rapi & cepat.</div>
         <div class="sub">
-          Pilih produk → bayar QRIS → admin verifikasi → sistem otomatis kirim voucher/akses.
+          Pilih Produk → Bayar QRIS → Tunggu Verifikasi → Sistem Otomatis Kirim Akun.
           Cocok untuk kerja, kuliah, riset, coding, dan konten.
-        </div>
-        <div class="actions">
-          <a class="btn primary" href="#produk">Lihat Produk</a>
-          <a class="btn ghost" href="#cara">Cara Beli</a>
         </div>
         <div class="badges">
           <div class="badge">✅ Pembayaran QRIS</div>
           <div class="badge">✅ Status otomatis</div>
-          <div class="badge">✅ Voucher 1x klik</div>
+          <div class="badge">✅ Dijamin Private</div>
           <div class="badge">✅ Support after sales</div>
         </div>
       </div>
@@ -435,10 +444,7 @@ HOME_HTML = Template(r"""<!doctype html>
       $cards
     </div>
 
-    <div class="footer">
-      <div>© $year AI Premium Store</div>
-      <div style="opacity:.7">Admin panel: <code>/admin?token=TOKEN</code></div>
-    </div>
+  
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">
