@@ -404,17 +404,17 @@ def home():
         }}
 
 
-        .btn.primary{ position:relative; overflow:hidden; }
-        .btn.primary:after{
-          content:"";
-          position:absolute; inset:-2px;
-          background: radial-gradient(220px 90px at 30% 0%, rgba(255,255,255,.20), transparent 55%),
-                      radial-gradient(240px 120px at 70% 0%, rgba(56,189,248,.18), transparent 60%);
-          opacity:.0;
-          transition: opacity .25s ease;
-          pointer-events:none;
-        }
-        .btn.primary:hover:after{ opacity:.85; }
+        .btn.primary{{ position:relative; overflow:hidden; }}
+.btn.primary:after{{
+  content:"";
+  position:absolute; inset:-2px;
+  background: radial-gradient(220px 90px at 30% 0%, rgba(255,255,255,.20), transparent 55%),
+              radial-gradient(240px 120px at 70% 0%, rgba(56,189,248,.18), transparent 60%);
+  opacity:.0;
+  transition: opacity .25s ease;
+  pointer-events:none;
+}}
+.btn.primary:hover:after{{ opacity:.85; }}
 
         /* Trust + FAQ */
         .trust {{
