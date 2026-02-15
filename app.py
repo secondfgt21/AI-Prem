@@ -314,7 +314,7 @@ def home():
   transform: translateY(-4px);
   box-shadow: 0 20px 45px rgba(0,0,0,.45);
 }
-        }}
+        }
         .p-top .p-title {{
           font-weight: 900;
           font-size: 15px;
