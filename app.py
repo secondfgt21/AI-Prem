@@ -309,12 +309,12 @@ def home():
           padding: 16px;
           box-shadow: var(--shadow);
           transition: transform .2s ease, box-shadow .2s ease;
-}
-.p-card:hover{
-  transform: translateY(-4px);
-  box-shadow: 0 20px 45px rgba(0,0,0,.45);
-}
-        }
+        }}
+
+        .p-card:hover{{
+          transform: translateY(-4px);
+          box-shadow: 0 20px 45px rgba(0,0,0,.45);
+        }}
         .p-top .p-title {{
           font-weight: 900;
           font-size: 15px;
