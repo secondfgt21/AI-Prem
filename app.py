@@ -150,8 +150,7 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
     supabase.table("vouchers").update({"status": "used"}).in_("id", voucher_ids).execute()
 
     # simpan code voucher (bisa multi-line) + set paid
-    joined = "
-".join(codes)
+    joined = "\n".join(codes)
     supabase.table("orders").update({"status": "paid", "voucher_code": joined}).eq("id", order_id).execute()
 
     return codes
