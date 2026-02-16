@@ -2,11 +2,12 @@ import os
 import uuid
 import random
 import time
+import html as pyhtml
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
 
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from supabase import create_client, Client
 
@@ -27,9 +28,10 @@ app = FastAPI()
 # CONFIG
 # ======================
 PRODUCTS = {
-    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000},
-    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000},
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000, "unit": "akun"},
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000, "unit": "akun"},
 }
+
 
 QR_IMAGE_URL = os.getenv(
     "QR_IMAGE_URL",
@@ -123,11 +125,10 @@ def get_stock_map() -> Dict[str, int]:
     return stock
 
 def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Optional[list[str]]:
-    """
-    Ambil voucher sejumlah qty (status='available') untuk product_id,
-    set jadi used, lalu simpan ke order (voucher_code newline-separated).
-    """
-    qty = max(1, int(qty))
+    # ambil N voucher available utk product_id
+    qty = int(qty or 1)
+    if qty < 1:
+        qty = 1
 
     v = (
         supabase.table("vouchers")
@@ -142,31 +143,19 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
     if not v.data or len(v.data) < qty:
         return None
 
-    ids = [row["id"] for row in v.data]
+    voucher_ids = [row["id"] for row in v.data]
     codes = [row["code"] for row in v.data]
 
-    # set voucher jadi used
-    q = supabase.table("vouchers").update({"status": "used"})
-    if hasattr(q, "in_"):
-        q = q.in_("id", ids)
-        q.execute()
-    else:
-        for vid in ids:
-            supabase.table("vouchers").update({"status": "used"}).eq("id", vid).execute()
+    # set voucher jadi used (batch)
+    supabase.table("vouchers").update({"status": "used"}).in_("id", voucher_ids).execute()
 
-    # set order jadi paid + simpan codes voucher (newline-separated)
-    supabase.table("orders").update({
-        "status": "paid",
-        "voucher_code": "\n".join(codes) if codes else None,
-    }).eq("id", order_id).execute()
+    # simpan code voucher (bisa multi-line) + set paid
+    joined = "
+".join(codes)
+    supabase.table("orders").update({"status": "paid", "voucher_code": joined}).eq("id", order_id).execute()
 
     return codes
 
-def voucher_lines(v: str | None) -> list[str]:
-    txt = (v or "").strip()
-    if not txt:
-        return []
-    return [line.strip() for line in txt.splitlines() if line.strip()]
 # ======================
 # Templates
 # ======================
@@ -224,7 +213,13 @@ HOME_HTML = Template(r"""<!doctype html>
       white-space:nowrap;
     }
 
-    .hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin:8px 0 18px}
+    .hero{
+      display:grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap:14px;
+      align-items:stretch;
+      margin: 8px 0 18px;
+    }
     .card{
       background:var(--glass);
       border:1px solid var(--line);
@@ -266,7 +261,6 @@ HOME_HTML = Template(r"""<!doctype html>
     }
     .btn:hover{transform: translateY(-2px)}
     .btn:hover:after{opacity:1}
-    .p .btn{margin-top:auto}
     .btn.primary{
       background:linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.70));
       color:#061a0d;
@@ -306,9 +300,17 @@ HOME_HTML = Template(r"""<!doctype html>
     .step span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 
     .section{margin:18px 0 10px;font-size:14px;font-weight:950;letter-spacing:.2px;color:rgba(255,255,255,.86)}
-    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:stretch}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 
-    .p{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:transform .2s ease, box-shadow .2s ease;display:flex;flex-direction:column;min-height:260px}
+    .p{
+      background:var(--glass2);
+      border:1px solid var(--line);
+      border-radius:var(--r);
+      padding:16px;
+      box-shadow:var(--shadow);
+      transition: transform .2s ease, box-shadow .2s ease;
+      position:relative; overflow:hidden;
+    }
     .p:hover{
       transform: translateY(-4px);
       box-shadow: 0 24px 50px rgba(0,0,0,.50);
@@ -323,7 +325,7 @@ HOME_HTML = Template(r"""<!doctype html>
     .ptitle{font-weight:950;font-size:15px;margin-bottom:4px}
     .psub{font-size:12px;color:var(--muted)}
     .price{font-size:22px;font-weight:950;margin:12px 0 10px;letter-spacing:.2px}
-    .feats{display:grid;gap:6px;margin-bottom:12px;flex:1}
+    .feats{display:grid;gap:6px;margin-bottom:12px}
     .feat{font-size:12px;color:rgba(255,255,255,.86);
       background:rgba(255,255,255,.03);
       border:1px solid rgba(255,255,255,.08);
@@ -331,21 +333,25 @@ HOME_HTML = Template(r"""<!doctype html>
     }
     .note{margin-top:10px;font-size:12px;color:var(--muted)}
 
+    /* TERLARIS badge animation */
     
-    .buyrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
-    .qtybox{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:10px 12px}
-    .qtybtn{width:36px;height:36px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--text);font-weight:900}
-    .qtybtn:disabled{opacity:.45;cursor:not-allowed}
-    .qtyval{min-width:28px;text-align:center;font-weight:900}
-
-    /* Desktop tetap seperti mobile + potong space kanan */
-    @media (min-width: 920px){
-      .hero{grid-template-columns:1fr}
-      .grid{grid-template-columns:1fr}
-      .wrap{max-width:620px}
+    .buyrow{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .qtybox{
+      display:flex;align-items:center;gap:10px;
+      background:rgba(255,255,255,.04);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:8px 10px;
     }
-/* TERLARIS badge animation */
-    .hot{
+    .qtybtn{
+      width:36px;height:36px;border-radius:12px;
+      border:1px solid rgba(255,255,255,.16);
+      background:transparent;color:var(--text);
+      font-weight:950;cursor:pointer;
+    }
+    .qtybtn:disabled{opacity:.45;cursor:not-allowed}
+    .qtyval{min-width:22px;text-align:center;font-weight:950}
+.hot{
       display:inline-flex;align-items:center;gap:6px;
       font-size:11px;
       font-weight:950;
@@ -413,7 +419,8 @@ HOME_HTML = Template(r"""<!doctype html>
     .wa small{font-weight:800;opacity:.8}
 
     /* Responsive */
-    @media (max-width: 920px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.title{font-size:26px}}
+    @media (max-width: 920px){
+      .hero{grid-template-columns:1fr}
       .grid{grid-template-columns:1fr}
       .title{font-size:26px}
     }
@@ -507,90 +514,44 @@ HOME_HTML = Template(r"""<!doctype html>
     }
     loadStock();
     setInterval(loadStock, 8000);
-  </script>
+    // qty +/- di tiap card, max sesuai stok
+    document.querySelectorAll('.p[data-pid]').forEach(card=>{
+      const pid = card.getAttribute('data-pid');
+      const stock = Number(card.getAttribute('data-stock') || 0);
+      const minus = card.querySelector('.qtybtn.minus');
+      const plus  = card.querySelector('.qtybtn.plus');
+      const valEl = card.querySelector('.qtyval');
+      const buy   = card.querySelector('a.buy');
+      let qty = 1;
 
-  <script>
-  // qty controls ( - / + ) + guard vs stock + redirect checkout?qty=
-  (function(){
-    function syncCard(card){
-      const stock = parseInt(card.getAttribute("data-stock") || "0", 10) || 0;
-      const qtyEl = card.querySelector(".qtyval");
-      const minus = card.querySelector(".qty-minus");
-      const plus  = card.querySelector(".qty-plus");
-      const buy   = card.querySelector(".buybtn");
-      let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+      function sync(){
+        // batas
+        if(qty < 1) qty = 1;
+        if(stock > 0 && qty > stock) qty = stock;
 
-      if(stock <= 0){
-        qty = 1;
-        if(qtyEl) qtyEl.textContent = "1";
-        if(minus) minus.disabled = true;
-        if(plus)  plus.disabled = true;
-        if(buy){ buy.disabled = true; buy.setAttribute("aria-disabled","true"); }
-        return;
+        if(valEl) valEl.textContent = String(qty);
+
+        // disable tombol
+        if(minus) minus.disabled = (qty <= 1) || (stock <= 0);
+        if(plus)  plus.disabled  = (stock <= 0) || (qty >= stock);
+
+        // update href
+        if(buy){
+          buy.href = `/checkout/${encodeURIComponent(pid)}?qty=${encodeURIComponent(qty)}`;
+          if(stock <= 0){
+            buy.style.opacity = '.55';
+            buy.style.filter = 'grayscale(1)';
+            buy.style.pointerEvents = 'none';
+          }
+        }
       }
 
-      qty = Math.max(1, Math.min(qty, stock));
-      if(qtyEl) qtyEl.textContent = String(qty);
-      if(minus) minus.disabled = qty <= 1;
-      if(plus)  plus.disabled  = qty >= stock;
-      if(buy){ buy.disabled = false; buy.removeAttribute("aria-disabled"); }
-    }
+      if(minus) minus.addEventListener('click', ()=>{ qty -= 1; sync(); });
+      if(plus)  plus.addEventListener('click', ()=>{ qty += 1; sync(); });
 
-    function bind(){
-      document.querySelectorAll(".p[data-product]").forEach(card=>{
-        syncCard(card);
-        const minus = card.querySelector(".qty-minus");
-        const plus  = card.querySelector(".qty-plus");
-        const buy   = card.querySelector(".buybtn");
+      sync();
+    });
 
-        if(minus){
-          minus.addEventListener("click", ()=>{
-            const qtyEl = card.querySelector(".qtyval");
-            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
-            qty -= 1;
-            if(qtyEl) qtyEl.textContent = String(qty);
-            syncCard(card);
-          });
-        }
-        if(plus){
-          plus.addEventListener("click", ()=>{
-            const qtyEl = card.querySelector(".qtyval");
-            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
-            qty += 1;
-            if(qtyEl) qtyEl.textContent = String(qty);
-            syncCard(card);
-          });
-        }
-        if(buy){
-          buy.addEventListener("click", ()=>{
-            if(buy.disabled) return;
-            const pid = buy.getAttribute("data-buy") || card.getAttribute("data-product");
-            const qtyEl = card.querySelector(".qtyval");
-            const qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
-            window.location.href = "/checkout/" + encodeURIComponent(pid) + "?qty=" + encodeURIComponent(qty);
-          });
-        }
-      });
-    }
-
-    async function refreshStock(){
-      try{
-        const r = await fetch("/api/stock");
-        const j = await r.json();
-        if(!j || !j.stock) return;
-        for(const pid in j.stock){
-          const el = document.getElementById("stock-" + pid);
-          if(el) el.textContent = "Stok: " + j.stock[pid] + " tersedia";
-          const card = document.querySelector('.p[data-product="' + pid + '"]');
-          if(card){ card.setAttribute("data-stock", j.stock[pid]); syncCard(card); }
-        }
-      }catch(e){}
-    }
-
-    bind();
-    refreshStock();
-    setInterval(refreshStock, 15000);
-  })();
   </script>
 </body>
 </html>
@@ -702,7 +663,6 @@ PAY_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Pembayaran QRIS</h1>
     <div class="muted">Produk: <b>$product_name</b></div>
-    <div class="muted">Qty: <b>$qty</b> × Rp $unit = <b>Rp $subtotal</b></div>
 
     <div style="margin-top:12px;">Total transfer:</div>
     <div class="total">Rp $total</div>
@@ -857,7 +817,6 @@ STATUS_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Status Order</h1>
     <div class="muted">Produk: <b>$pid</b></div>
-    <div class="muted">Qty: <b>$qty</b></div>
     <div class="muted">Nominal: <b>Rp $amount</b></div>
 
     <div class="badge"><span id="st">$st</span> <span class="spin" title="auto cek"></span></div>
@@ -981,7 +940,6 @@ VOUCHER_HTML = Template(r"""<!doctype html>
       font-weight:950;
       letter-spacing:.4px;
       word-break:break-all;
-      white-space:pre-wrap;
       position:relative;
     }
     .btn{
@@ -1075,20 +1033,18 @@ ADMIN_HTML = Template(r"""<!doctype html>
 @app.get("/", response_class=HTMLResponse)
 def home():
     stock = get_stock_map()
-    cards = ""
+    cards = []
     for pid, p in PRODUCTS.items():
-        stok = int(stock.get(pid, 0))
-        stok_txt = f"Stok: {stok} tersedia"
+        st = int(stock.get(pid, 0))
+        disabled = st <= 0
         hot = '<span class="hot">🔥 TERLARIS</span>' if pid == "gemini" else ""
-        disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
-        disabled_btn = "disabled" if stok <= 0 else ""
-
-        cards += f"""
-          <div class="p" data-product="{pid}" data-stock="{stok}">
+        cards.append(f"""
+          <div class="p" data-pid="{pid}" data-stock="{st}">
             <div class="ptitle">{p["name"]}</div>
             <div style="margin:6px 0 6px;">{hot}</div>
-            <div class="psub" id="stock-{pid}">{stok_txt}</div>
+            <div class="psub" id="stock-{pid}">Stok: {st} tersedia</div>
             <div class="price">Rp {rupiah(int(p["price"]))}</div>
+
             <div class="feats">
               <div class="feat">✅ Aktivasi cepat</div>
               <div class="feat">✅ Garansi sesuai produk</div>
@@ -1097,24 +1053,27 @@ def home():
 
             <div class="buyrow">
               <div class="qtybox">
-                <button class="qtybtn qty-minus" type="button" {disabled_btn}>-</button>
+                <button class="qtybtn minus" type="button" {'disabled' if disabled else ''}>-</button>
                 <span class="qtyval">1</span>
-                <button class="qtybtn qty-plus" type="button" {disabled_btn}>+</button>
+                <button class="qtybtn plus" type="button" {'disabled' if disabled else ''}>+</button>
               </div>
 
-              <button class="btn primary buybtn" type="button" data-buy="{pid}" {disabled_attr}>
+              <a class="btn primary buy" href="/checkout/{pid}?qty=1"
+                 style="{'opacity:.55;filter:grayscale(1);pointer-events:none;' if disabled else ''}">
                 Beli Sekarang
-              </button>
+              </a>
             </div>
 
-            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → verifikasi admin → voucher/akses terkirim")}</div>
+            <div class="note">{'Stok habis, tombol beli dinonaktifkan.' if disabled else 'Bayar QRIS → verifikasi admin → voucher/akses terkirim'}</div>
           </div>
-        """
-    html = HOME_HTML.substitute(cards=cards, year=now_utc().year)
+        """)
+    cards_html = "\n".join(cards)
+
+HOME_HTML.substitute(cards=cards_html, year=now_utc().year)
     return HTMLResponse(html)
 
 @app.get("/checkout/{product_id}")
-def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)):
+def checkout(product_id: str, request: Request):
     """
     Buat order pending + nominal unik.
     FIX: setelah dibuat, redirect ke /pay/{order_id} supaya refresh tidak bikin order baru.
@@ -1141,19 +1100,9 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
         except Exception:
             pass
 
-    # cek stok realtime (berdasarkan voucher yang available)
-    stock_map = get_stock_map()
-    stock = int(stock_map.get(product_id, 0))
-    if stock <= 0:
-        return HTMLResponse("<h3>Stok habis</h3>", status_code=400)
-
-    if qty > stock:
-        qty = stock
-
     base_price = int(PRODUCTS[product_id]["price"])
     unique_code = random.randint(101, 999)
-    # total = (harga * qty) + kode unik
-    total = (base_price * int(qty)) + unique_code
+    total = base_price + unique_code
 
     order_id = str(uuid.uuid4())
     created_at = now_utc().isoformat()
@@ -1163,8 +1112,8 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
             "id": order_id,
             "product_id": product_id,
             "qty": int(qty),
-            "unit": int(base_price),
-            "amount_idr": int(total),
+            "unit": PRODUCTS.get(product_id, {}).get("unit", "unit"),
+            "amount_idr": total,
             "status": "pending",
             "created_at": created_at,
             "voucher_code": None,
@@ -1196,16 +1145,10 @@ def pay(order_id: str):
 
     pid = order.get("product_id", "")
     amount = int(order.get("amount_idr") or 0)
-    qty = int(order.get("qty") or 1)
-    unit = int(order.get("unit") or PRODUCTS.get(pid, {}).get("price", 0) or 0)
-    subtotal = unit * qty
     product_name = PRODUCTS.get(pid, {}).get("name", pid)
 
     html = PAY_HTML.substitute(
         product_name=product_name,
-        qty=str(qty),
-        unit=rupiah(unit),
-        subtotal=rupiah(subtotal),
         total=rupiah(amount),
         qris=QR_IMAGE_URL,
         order_id=order_id,
@@ -1228,7 +1171,6 @@ def status(order_id: str):
 
     amount = int(order.get("amount_idr") or 0)
     pid = order.get("product_id", "")
-    qty = int(order.get("qty") or 1)
 
     badge = "#f59e0b" if st == "pending" else "#ef4444"
     # TTL seconds left
@@ -1237,7 +1179,6 @@ def status(order_id: str):
 
     html = STATUS_HTML.substitute(
         pid=pid,
-        qty=str(qty),
         amount=rupiah(amount),
         st=st.upper(),
         badge=badge,
@@ -1266,7 +1207,16 @@ def voucher(order_id: str):
         </body></html>
         """)
 
-    html = VOUCHER_HTML.substitute(pid=order.get("product_id"), code=code)
+    code_lines = [c.strip() for c in str(code or "").splitlines() if c.strip()]
+    if not code_lines:
+        code_safe = ""
+    elif len(code_lines) == 1:
+        code_safe = pyhtml.escape(code_lines[0])
+    else:
+        # tampilkan beberapa voucher, masing-masing per baris
+        code_safe = "<br>".join(pyhtml.escape(x) for x in code_lines)
+
+    html = VOUCHER_HTML.substitute(pid=order.get("product_id"), code=code_safe)
     return HTMLResponse(html)
 
 # ======================
@@ -1318,7 +1268,7 @@ def admin(token: Optional[str] = None):
 
     res = (
         supabase.table("orders")
-        .select("id,product_id,qty,unit,amount_idr,status,created_at,voucher_code")
+        .select("id,product_id,amount_idr,status,created_at,voucher_code")
         .order("created_at", desc=True)
         .limit(80)
         .execute()
@@ -1334,7 +1284,6 @@ def admin(token: Optional[str] = None):
             st = (o.get("status") or "pending").lower()
             pid = o.get("product_id", "")
             amt = int(o.get("amount_idr") or 0)
-            qty = int(o.get("qty") or 1)
             created = o.get("created_at", "")
             vcode = o.get("voucher_code")
 
@@ -1360,7 +1309,7 @@ def admin(token: Optional[str] = None):
             items += f"""
             <div class="row">
               <div class="col">
-            <div><b>{pid}</b> — Qty {qty} — Rp {rupiah(amt)}</div>
+                <div><b>{pid}</b> — Rp {rupiah(amt)}</div>
                 <div class="muted">ID: {oid}</div>
                 <div class="muted">{created}</div>
                 <div class="muted">Status: {st}</div>
@@ -1376,7 +1325,7 @@ def admin_verify(order_id: str, token: Optional[str] = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
 
-    res = supabase.table("orders").select("id,product_id,qty,status,voucher_code").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("id,product_id,qty,unit,status,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return PlainTextResponse("Order not found", status_code=404)
 
@@ -1393,9 +1342,29 @@ def admin_verify(order_id: str, token: Optional[str] = None):
     if st == "cancelled":
         return HTMLResponse("<h3>Order sudah cancelled/expired</h3>", status_code=410)
 
-    # assign voucher sesuai qty (sekali klik). fungsi ini juga akan set status order = paid.
-    qty = int(order.get("qty") or 1)
-    claim_vouchers_for_order(order_id, pid, qty)
+    # set paid dulu (idempotent)
+    supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
+
+    # kalau voucher belum ada, claim dari table vouchers sesuai qty
+    try:
+        chk = (
+            supabase.table("orders")
+            .select("voucher_code,product_id,qty,status")
+            .eq("id", order_id)
+            .limit(1)
+            .execute()
+        )
+        if chk.data:
+            row = chk.data[0]
+            status_now = (row.get("status") or "").lower()
+            if status_now != "paid" or not row.get("voucher_code"):
+                pid = row.get("product_id")
+                q = int(row.get("qty") or 1)
+                got = claim_vouchers_for_order(order_id, pid, q)
+                if got is None:
+                    print("[ADMIN_VERIFY] voucher kurang / habis untuk", pid, "qty", q)
+    except Exception as e:
+        print("[ADMIN_VERIFY] err:", e)
 
     # redirect buyer ke voucher (atau halaman voucher akan bilang stok habis)
     return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
