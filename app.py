@@ -27,8 +27,8 @@ app = FastAPI()
 # CONFIG
 # ======================
 PRODUCTS = {
-    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 29_000},
-    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 14_000},
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 25_000},
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 10_000},
 }
 
 QR_IMAGE_URL = os.getenv(
@@ -122,32 +122,49 @@ def get_stock_map() -> Dict[str, int]:
         print("[STOCK] err:", e)
     return stock
 
-def claim_voucher_for_order(order_id: str, product_id: str) -> Optional[str]:
-    # ambil 1 voucher available utk product_id
+def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Optional[list[str]]:
+    """
+    Ambil voucher sejumlah qty (status='available') untuk product_id,
+    set jadi used, lalu simpan ke order (voucher_code newline-separated).
+    """
+    qty = max(1, int(qty))
+
     v = (
         supabase.table("vouchers")
         .select("id,code")
         .eq("product_id", product_id)
         .eq("status", "available")
         .order("id", desc=False)
-        .limit(1)
+        .limit(qty)
         .execute()
     )
 
-    if not v.data:
+    if not v.data or len(v.data) < qty:
         return None
 
-    voucher_id = v.data[0]["id"]
-    code = v.data[0]["code"]
+    ids = [row["id"] for row in v.data]
+    codes = [row["code"] for row in v.data]
 
     # set voucher jadi used
-    supabase.table("vouchers").update({"status": "used"}).eq("id", voucher_id).execute()
+    q = supabase.table("vouchers").update({"status": "used"})
+    if hasattr(q, "in_"):
+        q = q.in_("id", ids)
+        q.execute()
+    else:
+        for vid in ids:
+            supabase.table("vouchers").update({"status": "used"}).eq("id", vid).execute()
 
-    # set order jadi paid + simpan code voucher (kalau belum di-set)
-    supabase.table("orders").update({"status": "paid", "voucher_code": code}).eq("id", order_id).execute()
+    # set order jadi paid + simpan codes voucher (newline-separated)
+    supabase.table("orders").update({"status": "paid", "voucher_code": "
+".join(codes)}).eq("id", order_id).execute()
 
-    return code
+    return codes
 
+def voucher_lines(v: str | None) -> list[str]:
+    txt = (v or "").strip()
+    if not txt:
+        return []
+    return [line.strip() for line in txt.splitlines() if line.strip()]
 # ======================
 # Templates
 # ======================
@@ -156,7 +173,7 @@ HOME_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>AI Premium</title>
+  <title>AI Premium Store</title>
   <style>
     :root{
       --bg:#070c18;
@@ -205,20 +222,7 @@ HOME_HTML = Template(r"""<!doctype html>
       white-space:nowrap;
     }
 
-    /* paksa layout tetap seperti mobile */
-.hero{
-  display:grid;
-  grid-template-columns:1fr;
-  gap:14px;
-}
-
-/* batasi lebar halaman supaya tidak melebar di desktop */
-.container,
-.section,
-body > div {
-  max-width: 620px;
-  margin: 0 auto;
-}
+    .hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin:8px 0 18px}
     .card{
       background:var(--glass);
       border:1px solid var(--line);
@@ -325,7 +329,20 @@ body > div {
     }
     .note{margin-top:10px;font-size:12px;color:var(--muted)}
 
-    /* TERLARIS badge animation */
+    
+    .buyrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+    .qtybox{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:10px 12px}
+    .qtybtn{width:36px;height:36px;border-radius:12px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--text);font-weight:900}
+    .qtybtn:disabled{opacity:.45;cursor:not-allowed}
+    .qtyval{min-width:28px;text-align:center;font-weight:900}
+
+    /* Desktop tetap seperti mobile + potong space kanan */
+    @media (min-width: 920px){
+      .hero{grid-template-columns:1fr}
+      .grid{grid-template-columns:1fr}
+      .wrap{max-width:620px}
+    }
+/* TERLARIS badge animation */
     .hot{
       display:inline-flex;align-items:center;gap:6px;
       font-size:11px;
@@ -406,24 +423,29 @@ body > div {
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>AI Premium</h1>
-          <div class="tag">Akses AI premium • Pembayaran QRIS • Proses Cepat</div>
+          <h1>AI Premium Store</h1>
+          <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
         </div>
       </div>
+      <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis • <span id="vis">...</span> online</div>
     </div>
 
     <div class="hero">
       <div class="card heroL">
-        <div class="kicker">⚡ Fast Checkout <span style="opacity:.5">•</span> 📌 Harga Jelas <span style="opacity:.5">•</span> ✅ Auto Kirim</div>
+        <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga jelas <span style="opacity:.5">•</span> ✅ Auto voucher</div>
         <div class="title">Beli akses AI premium dengan proses rapi & cepat.</div>
         <div class="sub">
-          Pilih Produk → Bayar QRIS → Tunggu Verifikasi → Sistem Otomatis Kirim Akun.
+          Pilih produk → bayar QRIS → admin verifikasi → sistem otomatis kirim voucher/akses.
           Cocok untuk kerja, kuliah, riset, coding, dan konten.
+        </div>
+        <div class="actions">
+          <a class="btn primary" href="#produk">Lihat Produk</a>
+          <a class="btn ghost" href="#cara">Cara Beli</a>
         </div>
         <div class="badges">
           <div class="badge">✅ Pembayaran QRIS</div>
           <div class="badge">✅ Status otomatis</div>
-          <div class="badge">✅ Dijamin Private</div>
+          <div class="badge">✅ Voucher 1x klik</div>
           <div class="badge">✅ Support after sales</div>
         </div>
       </div>
@@ -444,7 +466,10 @@ body > div {
       $cards
     </div>
 
-  
+    <div class="footer">
+      <div>© $year AI Premium Store</div>
+      <div style="opacity:.7">Admin panel: <code>/admin?token=TOKEN</code></div>
+    </div>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">
@@ -480,6 +505,90 @@ body > div {
     }
     loadStock();
     setInterval(loadStock, 8000);
+  </script>
+
+  <script>
+  // qty controls ( - / + ) + guard vs stock + redirect checkout?qty=
+  (function(){
+    function syncCard(card){
+      const stock = parseInt(card.getAttribute("data-stock") || "0", 10) || 0;
+      const qtyEl = card.querySelector(".qtyval");
+      const minus = card.querySelector(".qty-minus");
+      const plus  = card.querySelector(".qty-plus");
+      const buy   = card.querySelector(".buybtn");
+      let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+
+      if(stock <= 0){
+        qty = 1;
+        if(qtyEl) qtyEl.textContent = "1";
+        if(minus) minus.disabled = true;
+        if(plus)  plus.disabled = true;
+        if(buy){ buy.disabled = true; buy.setAttribute("aria-disabled","true"); }
+        return;
+      }
+
+      qty = Math.max(1, Math.min(qty, stock));
+      if(qtyEl) qtyEl.textContent = String(qty);
+      if(minus) minus.disabled = qty <= 1;
+      if(plus)  plus.disabled  = qty >= stock;
+      if(buy){ buy.disabled = false; buy.removeAttribute("aria-disabled"); }
+    }
+
+    function bind(){
+      document.querySelectorAll(".p[data-product]").forEach(card=>{
+        syncCard(card);
+        const minus = card.querySelector(".qty-minus");
+        const plus  = card.querySelector(".qty-plus");
+        const buy   = card.querySelector(".buybtn");
+
+        if(minus){
+          minus.addEventListener("click", ()=>{
+            const qtyEl = card.querySelector(".qtyval");
+            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            qty -= 1;
+            if(qtyEl) qtyEl.textContent = String(qty);
+            syncCard(card);
+          });
+        }
+        if(plus){
+          plus.addEventListener("click", ()=>{
+            const qtyEl = card.querySelector(".qtyval");
+            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            qty += 1;
+            if(qtyEl) qtyEl.textContent = String(qty);
+            syncCard(card);
+          });
+        }
+        if(buy){
+          buy.addEventListener("click", ()=>{
+            if(buy.disabled) return;
+            const pid = buy.getAttribute("data-buy") || card.getAttribute("data-product");
+            const qtyEl = card.querySelector(".qtyval");
+            const qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            window.location.href = "/checkout/" + encodeURIComponent(pid) + "?qty=" + encodeURIComponent(qty);
+          });
+        }
+      });
+    }
+
+    async function refreshStock(){
+      try{
+        const r = await fetch("/api/stock");
+        const j = await r.json();
+        if(!j || !j.stock) return;
+        for(const pid in j.stock){
+          const el = document.getElementById("stock-" + pid);
+          if(el) el.textContent = "Stok: " + j.stock[pid] + " tersedia";
+          const card = document.querySelector('.p[data-product="' + pid + '"]');
+          if(card){ card.setAttribute("data-stock", j.stock[pid]); syncCard(card); }
+        }
+      }catch(e){}
+    }
+
+    bind();
+    refreshStock();
+    setInterval(refreshStock, 15000);
+  })();
   </script>
 </body>
 </html>
@@ -963,10 +1072,14 @@ def home():
     stock = get_stock_map()
     cards = ""
     for pid, p in PRODUCTS.items():
-        stok_txt = f"Stok: {stock.get(pid,0)} tersedia"
+        stok = int(stock.get(pid, 0))
+        stok_txt = f"Stok: {stok} tersedia"
         hot = '<span class="hot">🔥 TERLARIS</span>' if pid == "gemini" else ""
+        disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
+        disabled_btn = "disabled" if stok <= 0 else ""
+
         cards += f"""
-          <div class="p">
+          <div class="p" data-product="{pid}" data-stock="{stok}">
             <div class="ptitle">{p["name"]}</div>
             <div style="margin:6px 0 6px;">{hot}</div>
             <div class="psub" id="stock-{pid}">{stok_txt}</div>
@@ -976,15 +1089,27 @@ def home():
               <div class="feat">✅ Garansi sesuai produk</div>
               <div class="feat">✅ Support after sales</div>
             </div>
-            <a class="btn primary" href="/checkout/{pid}">Beli Sekarang</a>
-            <div class="note">Bayar QRIS → verifikasi admin → voucher/akses terkirim</div>
+
+            <div class="buyrow">
+              <div class="qtybox">
+                <button class="qtybtn qty-minus" type="button" {disabled_btn}>-</button>
+                <span class="qtyval">1</span>
+                <button class="qtybtn qty-plus" type="button" {disabled_btn}>+</button>
+              </div>
+
+              <button class="btn primary buybtn" type="button" data-buy="{pid}" {disabled_attr}>
+                Beli Sekarang
+              </button>
+            </div>
+
+            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → verifikasi admin → voucher/akses terkirim")}</div>
           </div>
         """
     html = HOME_HTML.substitute(cards=cards, year=now_utc().year)
     return HTMLResponse(html)
 
 @app.get("/checkout/{product_id}")
-def checkout(product_id: str, request: Request):
+def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)):
     """
     Buat order pending + nominal unik.
     FIX: setelah dibuat, redirect ke /pay/{order_id} supaya refresh tidak bikin order baru.
