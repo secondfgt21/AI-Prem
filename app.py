@@ -5,7 +5,6 @@ import time
 import html as pyhtml
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
-from string import Template
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
@@ -158,7 +157,7 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
 # ======================
 # Templates
 # ======================
-HOME_HTML = Template(r"""<!doctype html>
+HOME_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -554,7 +553,7 @@ HOME_HTML = Template(r"""<!doctype html>
   </script>
 </body>
 </html>
-""")
+"""
 
 PAY_HTML = Template(r"""<!doctype html>
 <html lang="id">
