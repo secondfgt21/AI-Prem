@@ -1094,10 +1094,28 @@ VOUCHER_HTML = Template(r"""<!doctype html>
 
     <div class="code" id="vcode">$code</div>
 
-    <button class="btn" onclick="navigator.clipboard.writeText('$code')">Salin Email</button>
+    <script>
+btn.onclick = async () => {
+  const text = code;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+
+  btn.innerText="✅ Tersalin";
+  setTimeout(()=>btn.innerText="Salin Email",1500);
+};
+</script>
 
     <div class="muted" style="margin-top:12px;">
-      Simpan kode ini. Jangan dibagikan ke orang lain.
+      Simpan akun email ini. Jangan dibagikan ke orang lain.
     </div>
   </div>
 
