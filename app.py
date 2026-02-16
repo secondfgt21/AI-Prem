@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from supabase import create_client, Client
 
@@ -155,8 +155,10 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
             supabase.table("vouchers").update({"status": "used"}).eq("id", vid).execute()
 
     # set order jadi paid + simpan codes voucher (newline-separated)
-    supabase.table("orders").update({"status": "paid", "voucher_code": "
-".join(codes)}).eq("id", order_id).execute()
+    supabase.table("orders").update({
+        "status": "paid",
+        "voucher_code": "\n".join(codes) if codes else None,
+    }).eq("id", order_id).execute()
 
     return codes
 
@@ -700,6 +702,7 @@ PAY_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Pembayaran QRIS</h1>
     <div class="muted">Produk: <b>$product_name</b></div>
+    <div class="muted">Qty: <b>$qty</b> × Rp $unit = <b>Rp $subtotal</b></div>
 
     <div style="margin-top:12px;">Total transfer:</div>
     <div class="total">Rp $total</div>
@@ -854,6 +857,7 @@ STATUS_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Status Order</h1>
     <div class="muted">Produk: <b>$pid</b></div>
+    <div class="muted">Qty: <b>$qty</b></div>
     <div class="muted">Nominal: <b>Rp $amount</b></div>
 
     <div class="badge"><span id="st">$st</span> <span class="spin" title="auto cek"></span></div>
@@ -977,6 +981,7 @@ VOUCHER_HTML = Template(r"""<!doctype html>
       font-weight:950;
       letter-spacing:.4px;
       word-break:break-all;
+      white-space:pre-wrap;
       position:relative;
     }
     .btn{
@@ -1136,9 +1141,19 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
         except Exception:
             pass
 
+    # cek stok realtime (berdasarkan voucher yang available)
+    stock_map = get_stock_map()
+    stock = int(stock_map.get(product_id, 0))
+    if stock <= 0:
+        return HTMLResponse("<h3>Stok habis</h3>", status_code=400)
+
+    if qty > stock:
+        qty = stock
+
     base_price = int(PRODUCTS[product_id]["price"])
     unique_code = random.randint(101, 999)
-    total = base_price + unique_code
+    # total = (harga * qty) + kode unik
+    total = (base_price * int(qty)) + unique_code
 
     order_id = str(uuid.uuid4())
     created_at = now_utc().isoformat()
@@ -1147,7 +1162,9 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
         {
             "id": order_id,
             "product_id": product_id,
-            "amount_idr": total,
+            "qty": int(qty),
+            "unit": int(base_price),
+            "amount_idr": int(total),
             "status": "pending",
             "created_at": created_at,
             "voucher_code": None,
@@ -1179,10 +1196,16 @@ def pay(order_id: str):
 
     pid = order.get("product_id", "")
     amount = int(order.get("amount_idr") or 0)
+    qty = int(order.get("qty") or 1)
+    unit = int(order.get("unit") or PRODUCTS.get(pid, {}).get("price", 0) or 0)
+    subtotal = unit * qty
     product_name = PRODUCTS.get(pid, {}).get("name", pid)
 
     html = PAY_HTML.substitute(
         product_name=product_name,
+        qty=str(qty),
+        unit=rupiah(unit),
+        subtotal=rupiah(subtotal),
         total=rupiah(amount),
         qris=QR_IMAGE_URL,
         order_id=order_id,
@@ -1205,6 +1228,7 @@ def status(order_id: str):
 
     amount = int(order.get("amount_idr") or 0)
     pid = order.get("product_id", "")
+    qty = int(order.get("qty") or 1)
 
     badge = "#f59e0b" if st == "pending" else "#ef4444"
     # TTL seconds left
@@ -1213,6 +1237,7 @@ def status(order_id: str):
 
     html = STATUS_HTML.substitute(
         pid=pid,
+        qty=str(qty),
         amount=rupiah(amount),
         st=st.upper(),
         badge=badge,
@@ -1293,7 +1318,7 @@ def admin(token: Optional[str] = None):
 
     res = (
         supabase.table("orders")
-        .select("id,product_id,amount_idr,status,created_at,voucher_code")
+        .select("id,product_id,qty,unit,amount_idr,status,created_at,voucher_code")
         .order("created_at", desc=True)
         .limit(80)
         .execute()
@@ -1309,6 +1334,7 @@ def admin(token: Optional[str] = None):
             st = (o.get("status") or "pending").lower()
             pid = o.get("product_id", "")
             amt = int(o.get("amount_idr") or 0)
+            qty = int(o.get("qty") or 1)
             created = o.get("created_at", "")
             vcode = o.get("voucher_code")
 
@@ -1334,7 +1360,7 @@ def admin(token: Optional[str] = None):
             items += f"""
             <div class="row">
               <div class="col">
-                <div><b>{pid}</b> — Rp {rupiah(amt)}</div>
+            <div><b>{pid}</b> — Qty {qty} — Rp {rupiah(amt)}</div>
                 <div class="muted">ID: {oid}</div>
                 <div class="muted">{created}</div>
                 <div class="muted">Status: {st}</div>
@@ -1350,7 +1376,7 @@ def admin_verify(order_id: str, token: Optional[str] = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
 
-    res = supabase.table("orders").select("id,product_id,status,voucher_code").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("id,product_id,qty,status,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return PlainTextResponse("Order not found", status_code=404)
 
@@ -1367,22 +1393,9 @@ def admin_verify(order_id: str, token: Optional[str] = None):
     if st == "cancelled":
         return HTMLResponse("<h3>Order sudah cancelled/expired</h3>", status_code=410)
 
-    # set paid dulu (idempotent)
-    supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
-
-    # kalau voucher belum ada, claim dari table vouchers
-    code = None
-    try:
-        chk = supabase.table("orders").select("voucher_code,product_id,status").eq("id", order_id).limit(1).execute()
-        if chk.data:
-            row = chk.data[0]
-            if (row.get("status") or "").lower() == "paid":
-                if row.get("voucher_code"):
-                    code = row["voucher_code"]
-                else:
-                    code = claim_voucher_for_order(order_id, row.get("product_id"))
-    except Exception as e:
-        print("[ADMIN_VERIFY] err:", e)
+    # assign voucher sesuai qty (sekali klik). fungsi ini juga akan set status order = paid.
+    qty = int(order.get("qty") or 1)
+    claim_vouchers_for_order(order_id, pid, qty)
 
     # redirect buyer ke voucher (atau halaman voucher akan bilang stok habis)
     return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
