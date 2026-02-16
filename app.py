@@ -172,7 +172,7 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
 # =========================================================
 # Templates
 # =========================================================
-HOME_HTML = Template(r"""<!doctype html>
+HOME_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -544,9 +544,9 @@ HOME_HTML = Template(r"""<!doctype html>
   </script>
 </body>
 </html>
-""")
+"""
 
-PAY_HTML = Template(r"""<!doctype html>
+PAY_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -697,9 +697,9 @@ PAY_HTML = Template(r"""<!doctype html>
   </script>
 </body>
 </html>
-""")
+"""
 
-STATUS_HTML = Template(r"""<!doctype html>
+STATUS_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -872,9 +872,9 @@ STATUS_HTML = Template(r"""<!doctype html>
   </script>
 </body>
 </html>
-""")
+"""
 
-VOUCHER_HTML = Template(r"""<!doctype html>
+VOUCHER_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -988,9 +988,9 @@ VOUCHER_HTML = Template(r"""<!doctype html>
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
 </body>
 </html>
-""")
+"""
 
-ADMIN_HTML = Template(r"""<!doctype html>
+ADMIN_HTML = r"""<!doctype html>
 <html lang="id">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
@@ -1016,7 +1016,7 @@ ADMIN_HTML = Template(r"""<!doctype html>
   </div>
 </body>
 </html>
-""")
+"""
 
 
 # =========================================================
