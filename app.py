@@ -202,7 +202,7 @@ HOME_HTML = Template(r"""<!doctype html>
   <title>AI Premium Store</title>
   <style>
     :root{
-      --bg:#070c18;
+--bg:#070c18;
       --glass:rgba(255,255,255,.06);
       --glass2:rgba(255,255,255,.09);
       --line:rgba(255,255,255,.12);
@@ -212,6 +212,10 @@ HOME_HTML = Template(r"""<!doctype html>
       --g2:#38bdf8;
       --shadow:0 18px 42px rgba(0,0,0,.45);
       --r:20px;
+      --panel2: rgba(255,255,255,.055);
+      --radius: 20px;
+      --ring: rgba(255,255,255,.14);
+      --accent: linear-gradient(135deg, rgba(56,189,248,.95), rgba(34,197,94,.92));
     }
     *{box-sizing:border-box}
     html{scroll-behavior:smooth}
@@ -229,12 +233,12 @@ HOME_HTML = Template(r"""<!doctype html>
     a{color:inherit}
     .wrap{
       width:100%;
-      max-width:100%;
-      margin:0;
-      padding:18px 14px 90px;
+      max-width:1200px;
+      margin:0 auto;
+      padding:20px 18px 90px;
     }
     @media (min-width: 900px){
-      .wrap{ padding:22px 22px 24px; }
+      .wrap{ padding:26px 28px 60px; }
     }
 
     .top{
@@ -257,7 +261,7 @@ HOME_HTML = Template(r"""<!doctype html>
       white-space:nowrap;
     }
 
-    .hero{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;margin:8px 0 18px}
+    .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:stretch;margin:10px 0 22px}
     .card{
       background:var(--glass);
       border:1px solid var(--line);
@@ -272,6 +276,18 @@ HOME_HTML = Template(r"""<!doctype html>
       position:absolute;inset:-2px;
       background: radial-gradient(700px 260px at 30% 10%, rgba(56,189,248,.18), transparent 60%);
       pointer-events:none;
+    }
+    .card:after{
+      content:"";
+      position:absolute;inset:0;
+      border-radius:var(--r);
+      padding:1px;
+      background:linear-gradient(135deg, rgba(56,189,248,.28), rgba(34,197,94,.22), rgba(56,189,248,.12));
+      -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor;
+      mask-composite:exclude;
+      pointer-events:none;
+      opacity:.9;
     }
     .heroL{padding:22px}
     .kicker{
@@ -339,9 +355,9 @@ HOME_HTML = Template(r"""<!doctype html>
     .step span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 
     .section{margin:18px 0 10px;font-size:14px;font-weight:950;letter-spacing:.2px;color:rgba(255,255,255,.86)}
-    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:stretch}
+    .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));align-items:stretch}
 
-    .p{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:transform .2s ease, box-shadow .2s ease;display:flex;flex-direction:column;min-height:260px}
+    .p{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);border-radius:22px;padding:18px;box-shadow:var(--shadow);transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease;display:flex;flex-direction:column;min-height:280px;position:relative;overflow:hidden}
     .p:hover{
       transform: translateY(-4px);
       box-shadow: 0 24px 50px rgba(0,0,0,.50);
@@ -352,6 +368,18 @@ HOME_HTML = Template(r"""<!doctype html>
       background: radial-gradient(360px 160px at 10% 10%, rgba(56,189,248,.12), transparent 60%);
       opacity:.9;
       pointer-events:none;
+    }
+    .p:after{
+      content:"";
+      position:absolute;inset:0;
+      border-radius:22px;
+      padding:1px;
+      background:linear-gradient(135deg, rgba(56,189,248,.22), rgba(34,197,94,.18), rgba(255,255,255,.06));
+      -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor;
+      mask-composite:exclude;
+      pointer-events:none;
+      opacity:.85;
     }
     .ptitle{font-weight:950;font-size:15px;margin-bottom:4px}
     .psub{font-size:12px;color:var(--muted)}
@@ -371,10 +399,7 @@ HOME_HTML = Template(r"""<!doctype html>
     .qtybtn:disabled{opacity:.45;cursor:not-allowed}
     .qtyval{min-width:28px;text-align:center;font-weight:900}
 
-    /* Desktop tetap seperti mobile + potong space kanan */
-    @media (min-width: 920px){
-      .hero{grid-template-columns:1fr}
-      .grid{grid-template-columns:1fr}
+          .grid{grid-template-columns:1fr}
       .wrap{max-width:620px}
     }
 /* TERLARIS badge animation */
@@ -446,7 +471,14 @@ HOME_HTML = Template(r"""<!doctype html>
     .wa small{font-weight:800;opacity:.8}
 
     /* Responsive */
-    @media (max-width: 920px){.hero{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.title{font-size:26px}}
+    @media (max-width: 920px){
+      .hero{grid-template-columns:1fr}
+      .title{font-size:26px}
+    }
+    @media (max-width: 520px){
+      .wrap{padding:16px 14px 90px}
+    }
+}
       .grid{grid-template-columns:1fr}
       .title{font-size:26px}
     }
@@ -1112,7 +1144,7 @@ def home():
     for pid, p in PRODUCTS.items():
         stok = int(stock.get(pid, 0))
         stok_txt = f"Stok: {stok} tersedia"
-        feats = p.get("features") or DEFAULT_FEATURES
+        feats = (PRODUCT_FEATS.get(pid) or p.get("features") or DEFAULT_FEATURES)
         feats_html = "<br>".join([f"✅ {f}" for f in feats])
         hot = '<span class="hot">🔥 TERLARIS</span>' if pid == "gemini" else ""
         disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
