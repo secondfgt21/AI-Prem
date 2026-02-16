@@ -1068,7 +1068,7 @@ def home():
         """)
     cards_html = "\n".join(cards)
 
-HOME_HTML.substitute(cards=cards_html, year=now_utc().year)
+    html = HOME_HTML.substitute(cards=cards_html, year=now_utc().year)
     return HTMLResponse(html)
 
 @app.get("/checkout/{product_id}")
