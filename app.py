@@ -1106,6 +1106,9 @@ def home():
     for pid, p in PRODUCTS.items():
         stok = int(stock.get(pid, 0))
         stok_txt = f"Stok: {stok} tersedia"
+        feats_html = ""
+    for f in p.get("features", []):
+        feats_html += f'<div class="feat">✅ {f}</div>'
         hot = '<span class="hot">🔥 TERLARIS</span>' if pid == "gemini" else ""
         disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
         disabled_btn = "disabled" if stok <= 0 else ""
@@ -1117,7 +1120,7 @@ def home():
             <div class="psub" id="stock-{pid}">{stok_txt}</div>
             <div class="price">Rp {rupiah(int(p["price"]))}</div>
             <div class="feats">
-  <div class="feat">{feats_html}</div>
+{feats_html}
 </div>
 
             <div class="buyrow">
