@@ -2,6 +2,9 @@ import os
 import uuid
 import random
 import time
+import json
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
@@ -16,6 +19,14 @@ from supabase import create_client, Client
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "ganti-tokenmu")
+# Pakasir (opsional) - untuk QRIS otomatis tanpa admin
+# Set di Render Environment Variables:
+# - PAKASIR_API_KEY
+# - PAKASIR_PROJECT (slug project di Pakasir)
+# - PUBLIC_BASE_URL (opsional, contoh: https://domainkamu.com)
+PAKASIR_API_KEY = os.getenv("PAKASIR_API_KEY", "")
+PAKASIR_PROJECT = os.getenv("PAKASIR_PROJECT", "")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 
 if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
     print("WARNING: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY belum di-set / tidak terbaca")
@@ -39,10 +50,10 @@ def _tpl_render(tpl, **kw) -> str:
 # CONFIG
 # ======================
 PRODUCTS = {
-    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 29_000,
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 15_000,
         "features": ['Akses penuh Gemini AI Pro', 'Google Drive 2TB', 'Flow + 1.000 credit', 'Aktivasi cepat']
     },
-    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 14_000,
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 5_000,
         "features": ['Akses model ChatGPT terbaru', 'Respons lebih cepat & akurat', 'Cocok untuk riset & coding', 'Aktivasi cepat']
     },
 }
@@ -80,6 +91,39 @@ def rupiah(n: int) -> str:
 
 def require_admin(token: Optional[str]) -> bool:
     return token == ADMIN_TOKEN
+
+def pakasir_enabled() -> bool:
+    return bool(PAKASIR_API_KEY and PAKASIR_PROJECT)
+
+def public_base_url(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}"
+
+def pakasir_pay_redirect_url(order_id: str, amount: int, request: Request) -> str:
+    base = f"https://app.pakasir.com/pay/{urllib.parse.quote(PAKASIR_PROJECT)}/{amount}"
+    redirect = urllib.parse.quote(public_base_url(request) + f"/status/{order_id}", safe="")
+    return f"{base}?order_id={urllib.parse.quote(order_id)}&qris_only=1&redirect={redirect}"
+
+def pakasir_transaction_detail(order_id: str, amount: int) -> dict | None:
+    if not pakasir_enabled():
+        return None
+    q = urllib.parse.urlencode({
+        "project": PAKASIR_PROJECT,
+        "amount": str(amount),
+        "order_id": order_id,
+        "api_key": PAKASIR_API_KEY,
+    })
+    url = "https://app.pakasir.com/api/transactiondetail?" + q
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read().decode("utf-8", "ignore")
+        return json.loads(raw)
+    except Exception:
+        return None
 
 def _client_ip(request: Request) -> str:
     # Render biasanya set X-Forwarded-For
@@ -199,7 +243,7 @@ HOME_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Impura</title>
+  <title>AI Premium Store</title>
   <style>
     :root{
 --bg:#070c18;
@@ -490,19 +534,19 @@ HOME_HTML = Template(r"""<!doctype html>
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>Impura</h1>
-          <div class="tag">Menyediakan berbagai layanan AI Premium</div>
+          <h1>AI Premium Store</h1>
+          <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
         </div>
       </div>
-      
+      <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis • <span id="vis">...</span> online</div>
     </div>
 
     <div class="hero">
       <div class="card heroL">
-        <div class="kicker">⚡ Fast Checkout <span style="opacity:.5">•</span> 📌 Harga Jelas <span style="opacity:.5">•</span> ✅ Bergaransi</div>
+        <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga jelas <span style="opacity:.5">•</span> ✅ Auto voucher</div>
         <div class="title">Beli akses AI premium dengan proses rapi & cepat.</div>
         <div class="sub">
-          Pilih produk → bayar QRIS → tunggu verifikasi → sistem otomatis kirim akun email.
+          Pilih produk → bayar QRIS → admin verifikasi → sistem otomatis kirim voucher/akses.
           Cocok untuk kerja, kuliah, riset, coding, dan konten.
         </div>
         <div class="actions">
@@ -512,7 +556,7 @@ HOME_HTML = Template(r"""<!doctype html>
         <div class="badges">
           <div class="badge">✅ Pembayaran QRIS</div>
           <div class="badge">✅ Status otomatis</div>
-          <div class="badge">✅ Bergaransi</div>
+          <div class="badge">✅ Voucher 1x klik</div>
           <div class="badge">✅ Support after sales</div>
         </div>
       </div>
@@ -521,9 +565,9 @@ HOME_HTML = Template(r"""<!doctype html>
         <div class="steps-title">Cara beli (3 langkah)</div>
         <div class="step"><div class="num">1</div><div><b>Pilih produk</b><span>Klik “Beli Sekarang” di produk yang kamu mau.</span></div></div>
         <div class="step"><div class="num">2</div><div><b>Bayar QRIS</b><span>Transfer sesuai nominal (termasuk kode unik).</span></div></div>
-        <div class="step"><div class="num">3</div><div><b>Verifikasi</b><span>Tunggu verifikasi → Akun email tampil otomatis.</span></div></div>
+        <div class="step"><div class="num">3</div><div><b>Verifikasi & voucher</b><span>Admin verifikasi → voucher tampil otomatis.</span></div></div>
         <div style="margin-top:10px;font-size:12px;color:var(--muted);">
-          Tip: setelah bayar, buka halaman status order untuk auto-redirect ke halaman akun email.
+          Tip: setelah bayar, buka halaman status order untuk auto-redirect ke voucher.
         </div>
       </div>
     </div>
@@ -534,13 +578,13 @@ HOME_HTML = Template(r"""<!doctype html>
     </div>
 
     <div class="footer">
-      <div>© $year impura</div>
-      
+      <div>© $year AI Premium Store</div>
+      <div style="opacity:.7">Admin panel: <code>/admin?token=TOKEN</code></div>
     </div>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">
-    💬 Chat Admin
+    💬 Chat Admin <small>WA</small>
   </a>
 
   <script>
@@ -789,7 +833,7 @@ PAY_HTML = Template(r"""<!doctype html>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
-  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
+  <div id="toast" class="toast">Voucher berhasil dikirim ✅ Mengarahkan...</div>
 
   <script>
     // auto cek setelah bayar (supaya user tidak perlu klik)
@@ -939,13 +983,13 @@ STATUS_HTML = Template(r"""<!doctype html>
     </div>
 
     <div class="muted" style="margin-top:14px;">
-      Halaman ini akan otomatis redirect ke akun email setelah verifikasi.<br/>
-      Jika sudah bayar tapi lama, klik tombol Chat Admin di pojok kanan bawah untuk konfirmasi.
+      Halaman ini akan otomatis redirect ke voucher setelah admin verifikasi.<br/>
+      Jika sudah bayar tapi lama, klik tombol WhatsApp untuk konfirmasi.
     </div>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
-  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
+  <div id="toast" class="toast">Voucher berhasil dikirim ✅ Mengarahkan...</div>
 
   <script>
     let ttl = $ttl_sec;
@@ -996,7 +1040,7 @@ VOUCHER_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Akun Emaik</title>
+  <title>Voucher</title>
   <style>
     :root{
       --bg:#070c18; --glass:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
@@ -1086,36 +1130,18 @@ VOUCHER_HTML = Template(r"""<!doctype html>
 </head>
 <body>
   <div class="box">
-    <h1>Akun Email</h1>
+    <h1>Voucher</h1>
     <div class="muted">Status: <b>PAID ✅</b></div>
     <div class="muted">Produk: <b>$pid</b></div>
 
-    <div class="success">✅ Akun email berhasil dikirim</div>
+    <div class="success">✅ Voucher berhasil dikirim</div>
 
     <div class="code" id="vcode">$code</div>
 
-    <script>
-btn.onclick = async () => {
-  const text = code;
-
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-  } else {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-  }
-
-  btn.innerText="✅ Tersalin";
-  setTimeout(()=>btn.innerText="Salin Email",1500);
-};
-</script>
+    <button class="btn" onclick="navigator.clipboard.writeText('$code')">Salin Voucher</button>
 
     <div class="muted" style="margin-top:12px;">
-      Simpan akun email ini. Jangan dibagikan ke orang lain.
+      Simpan kode ini. Jangan dibagikan ke orang lain.
     </div>
   </div>
 
@@ -1144,7 +1170,7 @@ ADMIN_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h2 style="margin:0 0 10px;">Admin Panel</h2>
     <div style="opacity:.75;margin-bottom:12px;">
-      Klik tombol untuk verifikasi + otomatis assign akun email lalu redirect ke halaman akun email.
+      Klik tombol untuk verifikasi + otomatis assign voucher lalu redirect ke halaman voucher.
     </div>
     $items
   </div>
@@ -1188,7 +1214,7 @@ def home():
               </button>
             </div>
 
-            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → tunggu verifikasi → akun email terkirim")}</div>
+            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → verifikasi admin → voucher/akses terkirim")}</div>
           </div>
         """
     html = _tpl_render(HOME_HTML, cards=cards, year=now_utc().year)
@@ -1261,38 +1287,112 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
     return resp
 
 @app.get("/pay/{order_id}", response_class=HTMLResponse)
-def pay(order_id: str):
+def pay(order_id: str, request: Request):
     res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
 
     order = res.data[0]
-    order, _ = _ensure_not_expired(order)
+    st = order.get("status", "pending")
+    amount = int(order.get("amount_idr", 0))
+    pid = order.get("product_id", "")
 
-    st = (order.get("status") or "pending").lower()
     if st == "paid":
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=302)
-    if st == "cancelled":
-        return HTMLResponse("<h3>Order sudah expired</h3><p>Silakan buat order baru dari halaman utama.</p>", status_code=410)
 
-    pid = order.get("product_id", "")
-    amount = int(order.get("amount_idr") or 0)
-    qty = int(order.get("qty") or 1)
-    unit = int(order.get("unit") or PRODUCTS.get(pid, {}).get("price", 0) or 0)
-    subtotal = unit * qty
-    product_name = PRODUCTS.get(pid, {}).get("name", pid)
+    # auto cancel 15 menit
+    created_dt = _parse_dt(order.get("created_at"))
+    if created_dt and (now_utc() - created_dt).total_seconds() > 15 * 60:
+        supabase.table("orders").update({"status": "cancelled"}).eq("id", order_id).execute()
+        return HTMLResponse("<h3>Order expired</h3><p>Silakan buat order baru.</p>", status_code=410)
 
-    html = _tpl_render(PAY_HTML, 
-        product_name=product_name,
-        qty=str(qty),
-        unit=rupiah(unit),
-        subtotal=rupiah(subtotal),
-        total=rupiah(amount),
-        qris=QR_IMAGE_URL,
-        order_id=order_id,
-        ttl=ORDER_TTL_MINUTES,
-    )
-    return HTMLResponse(html)
+    # ✅ Pakasir mode: redirect ke payment page Pakasir (QRIS only)
+    if pakasir_enabled():
+        return RedirectResponse(url=pakasir_pay_redirect_url(order_id, amount, request), status_code=302)
+
+    # fallback QR statis
+    return f"""
+    <html>
+    <head>
+        <title>Pembayaran QRIS</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <style>
+            body {{
+                font-family: Arial;
+                text-align:center;
+                background:#0f172a;
+                color:white;
+                padding:30px 14px;
+            }}
+            .box {{
+                background:#1e293b;
+                padding:22px;
+                border-radius:16px;
+                display:inline-block;
+                max-width:420px;
+                width:100%;
+                box-shadow:0 10px 25px rgba(0,0,0,0.35);
+            }}
+            img {{
+                margin-top:14px;
+                border-radius:12px;
+                background:white;
+                padding:10px;
+                width:100%;
+                max-width:260px;
+                height:auto;
+            }}
+            .total {{
+                font-size:28px;
+                font-weight:bold;
+                color:#22c55e;
+                margin:8px 0 6px;
+            }}
+            .muted {{ opacity:.75; font-size:13px; }}
+            .oid {{
+                margin-top:10px;
+                padding:10px;
+                border:1px dashed rgba(255,255,255,.25);
+                border-radius:12px;
+                font-size:12px;
+                opacity:.8;
+                word-break:break-all;
+            }}
+            .btn {{
+                display:inline-block;
+                margin-top:14px;
+                padding:10px 14px;
+                border-radius:10px;
+                text-decoration:none;
+                background:#334155;
+                color:white;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="box">
+            <h2>Pembayaran QRIS</h2>
+            <div class="muted">Produk: <b>{pid}</b></div>
+
+            <div style="margin-top:12px;">Total transfer:</div>
+            <div class="total">Rp {rupiah(amount)}</div>
+            <div class="muted">termasuk kode unik untuk verifikasi</div>
+
+            <div style="margin-top:12px;">Scan QRIS:</div>
+            <img src="{QR_IMAGE_URL}" alt="QRIS" />
+
+            <div class="oid">
+                Order ID:<br><b>{order_id}</b>
+            </div>
+
+            <a class="btn" href="/status/{order_id}">Cek Status</a>
+            <div class="muted" style="margin-top:10px;">
+                Setelah bayar, tunggu admin verifikasi.
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.get("/status/{order_id}", response_class=HTMLResponse)
 def status(order_id: str):
@@ -1341,9 +1441,9 @@ def voucher(order_id: str):
     if not code:
         return HTMLResponse("""
         <html><body style="font-family:Arial;background:#070c18;color:white;text-align:center;padding:40px">
-          <h2>Akun Email</h2>
+          <h2>Voucher</h2>
           <p>Status: PAID ✅</p>
-          <p style="opacity:.8">Maaf, stok untuk produk ini sedang habis.</p>
+          <p style="opacity:.8">Maaf, stok voucher untuk produk ini sedang habis.</p>
         </body></html>
         """)
 
@@ -1355,43 +1455,38 @@ def voucher(order_id: str):
 # ======================
 @app.get("/api/order/{order_id}")
 def api_order(order_id: str):
-    res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select("id,status,amount_idr,created_at,product_id,qty,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
 
-    order = res.data[0]
-    order, _ = _ensure_not_expired(order)
+    o = res.data[0]
+    st = o.get("status", "pending")
+    amount = int(o.get("amount_idr") or 0)
 
-    st = (order.get("status") or "pending").lower()
-    created = _parse_dt(order.get("created_at", "")) or now_utc()
-    ttl_sec = max(0, int(ORDER_TTL_MINUTES * 60 - (now_utc() - created).total_seconds()))
+    # auto cancel 15 menit
+    created_dt = _parse_dt(o.get("created_at"))
+    if st == "pending" and created_dt and (now_utc() - created_dt).total_seconds() > 15 * 60:
+        supabase.table("orders").update({"status": "cancelled"}).eq("id", order_id).execute()
+        st = "cancelled"
 
-    return {"ok": True, "status": st, "ttl_sec": ttl_sec}
+    # ✅ Pakasir auto-check
+    if st == "pending" and pakasir_enabled():
+        detail = pakasir_transaction_detail(order_id, amount) or {}
+        status_str = str(detail.get("status") or detail.get("payment_status") or "").lower()
+        paid_flag = (detail.get("paid") is True) or (detail.get("is_paid") is True)
 
-@app.get("/api/stock")
-def api_stock():
-    return {"ok": True, "stock": get_stock_map()}
+        if paid_flag or status_str in ("paid", "success", "completed", "settlement"):
+            supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
+            # auto-assign voucher sesuai qty (kalau belum pernah di-assign)
+            if not o.get("voucher_code"):
+                claim_vouchers_for_order(order_id)
+            st = "paid"
+        elif status_str in ("expired", "cancel", "cancelled", "canceled"):
+            supabase.table("orders").update({"status": "cancelled"}).eq("id", order_id).execute()
+            st = "cancelled"
 
-@app.get("/api/visitors")
-def api_visitors(request: Request):
-    # visitor counter: unique by cookie session
-    sid = request.cookies.get("vis_sid")
-    if not sid:
-        sid = str(uuid.uuid4())
-    t = time.time()
-    # expire old
-    for k, v in list(_VISITOR_SESS.items()):
-        if t - v > 45:
-            _VISITOR_SESS.pop(k, None)
-    _VISITOR_SESS[sid] = t
-    count = _VISITOR_BASE + len(_VISITOR_SESS) + random.randint(0, 9)
-    resp = JSONResponse({"ok": True, "count": count})
-    resp.set_cookie("vis_sid", sid, max_age=24*3600, httponly=True, samesite="lax")
-    return resp
+    return JSONResponse({"ok": True, "status": st})
 
-# ======================
-# ADMIN PANEL
-# ======================
 @app.get("/admin", response_class=HTMLResponse)
 def admin(token: Optional[str] = None):
     if not require_admin(token):
@@ -1429,7 +1524,7 @@ def admin(token: Optional[str] = None):
             elif st == "paid":
                 label = f"Voucher: {vcode}" if vcode else "Voucher: (habis / belum ada)"
                 action = f"""
-                <a class="lbtn" href="/voucher/{oid}">Buka Akun Email</a>
+                <a class="lbtn" href="/voucher/{oid}">Buka Voucher</a>
                 <div class="muted">{label}</div>
                 """
             else:
