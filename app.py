@@ -5,6 +5,27 @@ import time
 import json
 import urllib.parse
 import urllib.request
+def pakasir_create(order_id: str, amount: int):
+    url = "https://app.pakasir.com/api/create"
+
+    payload = urllib.parse.urlencode({
+        "api_key": PAKASIR_API_KEY,
+        "project": PAKASIR_PROJECT,
+        "amount": amount,
+        "order_id": order_id,
+        "qris_only": 1
+    }).encode()
+
+    try:
+        req = urllib.request.Request(url, data=payload)
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+
+        return data
+
+    except Exception as e:
+        print("PAKASIR ERROR:", e)
+        return {"qr_url": QR_IMAGE_URL}
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
@@ -1481,6 +1502,25 @@ def api_order(order_id: str):
             st = "cancelled"
 
     return JSONResponse({"ok": True, "status": st})
+    def pakasir_create(order_id: str, amount: int):
+    url = "https://app.pakasir.com/api/create"
+
+    payload = urllib.parse.urlencode({
+        "api_key": PAKASIR_API_KEY,
+        "project": PAKASIR_PROJECT,
+        "amount": amount,
+        "order_id": order_id,
+        "qris_only": 1
+    }).encode()
+
+    try:
+        req = urllib.request.Request(url, data=payload)
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+        return data
+    except Exception as e:
+        print("PAKASIR ERROR:", e)
+        return {"qr_url": QR_IMAGE_URL}
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin(token: Optional[str] = None):
@@ -1570,3 +1610,51 @@ def admin_verify(order_id: str, token: Optional[str] = None):
 
     # redirect buyer ke voucher (atau halaman voucher akan bilang stok habis)
     return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+    
+    from fastapi import Body
+
+@app.post("/api/create-order")
+async def api_create_order(payload: dict):
+    product_id = payload.get("product_id")
+    qty = int(payload.get("qty", 1))
+
+    if product_id not in PRODUCTS:
+        return JSONResponse({"ok": False, "error": "invalid product"})
+
+    stock_map = get_stock_map()
+    stock = int(stock_map.get(product_id, 0))
+
+    if stock <= 0:
+        return JSONResponse({"ok": False, "error": "stock empty"})
+
+    if qty > stock:
+        qty = stock
+
+    base_price = int(PRODUCTS[product_id]["price"])
+
+    # ❌ HAPUS kode unik
+    total = base_price * qty
+
+    order_id = str(uuid.uuid4())
+    created_at = now_utc().isoformat()
+
+    supabase.table("orders").insert({
+        "id": order_id,
+        "product_id": product_id,
+        "qty": qty,
+        "unit": base_price,
+        "amount_idr": total,
+        "status": "pending",
+        "created_at": created_at
+    }).execute()
+
+    # 🔥 buat QRIS Pakasir
+    trx = pakasir_create(order_id, total)
+    qr_url = trx.get("qr_url") or QR_IMAGE_URL
+
+    return {
+        "ok": True,
+        "order_id": order_id,
+        "qr_url": qr_url,
+        "amount": total
+}
