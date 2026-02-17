@@ -243,7 +243,7 @@ HOME_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>AI Premium Store</title>
+  <title>Impura</title>
   <style>
     :root{
 --bg:#070c18;
@@ -534,29 +534,26 @@ HOME_HTML = Template(r"""<!doctype html>
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>AI Premium Store</h1>
+          <h1>Impura</h1>
           <div class="tag">Akses AI premium • pembayaran QRIS • proses cepat</div>
         </div>
       </div>
-      <div class="pill">🛡️ Aman • Admin verifikasi • Voucher otomatis • <span id="vis">...</span> online</div>
+      
     </div>
 
     <div class="hero">
       <div class="card heroL">
-        <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga jelas <span style="opacity:.5">•</span> ✅ Auto voucher</div>
+        <div class="kicker">⚡ Fast checkout <span style="opacity:.5">•</span> 📌 Harga Murah <span style="opacity:.5">•</span> ✅ Otomatis</div>
         <div class="title">Beli akses AI premium dengan proses rapi & cepat.</div>
         <div class="sub">
-          Pilih produk → bayar QRIS → admin verifikasi → sistem otomatis kirim voucher/akses.
+          Pilih produk → bayar QRIS→ sistem otomatis kirim akun
           Cocok untuk kerja, kuliah, riset, coding, dan konten.
         </div>
-        <div class="actions">
-          <a class="btn primary" href="#produk">Lihat Produk</a>
-          <a class="btn ghost" href="#cara">Cara Beli</a>
-        </div>
+        
         <div class="badges">
           <div class="badge">✅ Pembayaran QRIS</div>
           <div class="badge">✅ Status otomatis</div>
-          <div class="badge">✅ Voucher 1x klik</div>
+          <div class="badge">✅ Garansi</div>
           <div class="badge">✅ Support after sales</div>
         </div>
       </div>
@@ -565,9 +562,9 @@ HOME_HTML = Template(r"""<!doctype html>
         <div class="steps-title">Cara beli (3 langkah)</div>
         <div class="step"><div class="num">1</div><div><b>Pilih produk</b><span>Klik “Beli Sekarang” di produk yang kamu mau.</span></div></div>
         <div class="step"><div class="num">2</div><div><b>Bayar QRIS</b><span>Transfer sesuai nominal (termasuk kode unik).</span></div></div>
-        <div class="step"><div class="num">3</div><div><b>Verifikasi & voucher</b><span>Admin verifikasi → voucher tampil otomatis.</span></div></div>
+        <div class="step"><div class="num">3</div><div><b>Verifikasi</b><span> Setelag bayar akun email tampil otomatis.</span></div></div>
         <div style="margin-top:10px;font-size:12px;color:var(--muted);">
-          Tip: setelah bayar, buka halaman status order untuk auto-redirect ke voucher.
+          Tip: setelah bayar, buka halaman status order untuk auto-redirect ke halaman akun email.
         </div>
       </div>
     </div>
@@ -578,13 +575,13 @@ HOME_HTML = Template(r"""<!doctype html>
     </div>
 
     <div class="footer">
-      <div>© $year AI Premium Store</div>
-      <div style="opacity:.7">Admin panel: <code>/admin?token=TOKEN</code></div>
+      <div>© $year Impura</div>
+      
     </div>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">
-    💬 Chat Admin <small>WA</small>
+    💬 Chat Admin
   </a>
 
   <script>
@@ -833,7 +830,7 @@ PAY_HTML = Template(r"""<!doctype html>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
-  <div id="toast" class="toast">Voucher berhasil dikirim ✅ Mengarahkan...</div>
+  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
 
   <script>
     // auto cek setelah bayar (supaya user tidak perlu klik)
@@ -983,13 +980,13 @@ STATUS_HTML = Template(r"""<!doctype html>
     </div>
 
     <div class="muted" style="margin-top:14px;">
-      Halaman ini akan otomatis redirect ke voucher setelah admin verifikasi.<br/>
+      Halaman ini akan otomatis redirect ke halaman yang menampilkan akun email setelah verifikasi.<br/>
       Jika sudah bayar tapi lama, klik tombol WhatsApp untuk konfirmasi.
     </div>
   </div>
 
   <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
-  <div id="toast" class="toast">Voucher berhasil dikirim ✅ Mengarahkan...</div>
+  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
 
   <script>
     let ttl = $ttl_sec;
@@ -1040,7 +1037,7 @@ VOUCHER_HTML = Template(r"""<!doctype html>
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Voucher</title>
+  <title>Akun</title>
   <style>
     :root{
       --bg:#070c18; --glass:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
@@ -1130,15 +1127,15 @@ VOUCHER_HTML = Template(r"""<!doctype html>
 </head>
 <body>
   <div class="box">
-    <h1>Voucher</h1>
+    <h1>Akun</h1>
     <div class="muted">Status: <b>PAID ✅</b></div>
     <div class="muted">Produk: <b>$pid</b></div>
 
-    <div class="success">✅ Voucher berhasil dikirim</div>
+    <div class="success">✅ Akun email berhasil dikirim</div>
 
     <div class="code" id="vcode">$code</div>
 
-    <button class="btn" onclick="navigator.clipboard.writeText('$code')">Salin Voucher</button>
+    
 
     <div class="muted" style="margin-top:12px;">
       Simpan kode ini. Jangan dibagikan ke orang lain.
@@ -1214,7 +1211,7 @@ def home():
               </button>
             </div>
 
-            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → verifikasi admin → voucher/akses terkirim")}</div>
+            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → verifikasi → Akun email terkirim")}</div>
           </div>
         """
     html = _tpl_render(HOME_HTML, cards=cards, year=now_utc().year)
@@ -1258,9 +1255,7 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
         qty = stock
 
     base_price = int(PRODUCTS[product_id]["price"])
-    unique_code = random.randint(101, 999)
-    # total = (harga * qty) + kode unik
-    total = (base_price * int(qty)) + unique_code
+    total = base_price * int(qty)
 
     order_id = str(uuid.uuid4())
     created_at = now_utc().isoformat()
@@ -1387,7 +1382,7 @@ def pay(order_id: str, request: Request):
 
             <a class="btn" href="/status/{order_id}">Cek Status</a>
             <div class="muted" style="margin-top:10px;">
-                Setelah bayar, tunggu admin verifikasi.
+                Setelah bayar, tunggu verifikasi.
             </div>
         </div>
     </body>
@@ -1435,7 +1430,7 @@ def voucher(order_id: str):
 
     order = res.data[0]
     if (order.get("status") or "").lower() != "paid":
-        return HTMLResponse("<h3>Belum diverifikasi admin</h3><p>Silakan tunggu.</p>", status_code=400)
+        return HTMLResponse("<h3>Belum terverifikasi</h3><p>Silakan tunggu.</p>", status_code=400)
 
     code = order.get("voucher_code")
     if not code:
