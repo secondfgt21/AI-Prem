@@ -5,6 +5,23 @@ import time
 import json
 import urllib.parse
 import urllib.request
+def pakasir_create(order_id: str, amount: int):
+    url = "https://app.pakasir.com/api/create"
+    payload = urllib.parse.urlencode({
+        "api_key": PAKASIR_API_KEY,
+        "project": PAKASIR_PROJECT,
+        "amount": amount,
+        "order_id": order_id,
+        "qris_only": 1
+    }).encode()
+
+    try:
+        req = urllib.request.Request(url, data=payload)
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        print("PAKASIR ERROR:", e)
+        return {"qr_url": QR_IMAGE_URL}
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
@@ -1450,7 +1467,10 @@ def voucher(order_id: str):
 # ======================
 @app.get("/api/order/{order_id}")
 def api_order(order_id: str):
-    res = supabase.table("orders").select("id,status,amount_idr,created_at,product_id,qty,voucher_code").eq("id", order_id).limit(1).execute()
+    res = supabase.table("orders").select(
+        "id,status,amount_idr,created_at,product_id,qty,voucher_code"
+    ).eq("id", order_id).limit(1).execute()
+
     if not res.data:
         return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
 
@@ -1472,38 +1492,16 @@ def api_order(order_id: str):
 
         if paid_flag or status_str in ("paid", "success", "completed", "settlement"):
             supabase.table("orders").update({"status": "paid"}).eq("id", order_id).execute()
-            # auto-assign voucher sesuai qty (kalau belum pernah di-assign)
             if not o.get("voucher_code"):
-                claim_vouchers_for_order(order_id)
+                # IMPORTANT: ini harus sesuai definisi function kamu
+                # kalau function kamu butuh (order_id, product_id, qty), pakai itu.
+                claim_vouchers_for_order(order_id, o.get("product_id"), int(o.get("qty") or 1))
             st = "paid"
         elif status_str in ("expired", "cancel", "cancelled", "canceled"):
             supabase.table("orders").update({"status": "cancelled"}).eq("id", order_id).execute()
             st = "cancelled"
 
-    return JSONResponse({"ok": True, "status": st})
-    def pakasir_create(order_id: str, amount: int):
-    url = "https://app.pakasir.com/api/create"
-
-    payload = urllib.parse.urlencode({
-        "api_key": PAKASIR_API_KEY,
-        "project": PAKASIR_PROJECT,
-        "amount": amount,
-        "order_id": order_id,
-        "qris_only": 1
-    }).encode()
-
-    try:
-        req = urllib.request.Request(url, data=payload)
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-
-        return data
-
-    except Exception as e:
-        print("PAKASIR ERROR:", e)
-        return {"qr_url": QR_IMAGE_URL}
-
-@app.get("/admin", response_class=HTMLResponse)
+    return JSONResponse({"ok": True, "status": st})@app.get("/admin", response_class=HTMLResponse)
 def admin(token: Optional[str] = None):
     if not require_admin(token):
         return HTMLResponse("<h3>Unauthorized</h3>", status_code=401)
