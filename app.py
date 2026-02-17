@@ -5,27 +5,6 @@ import time
 import json
 import urllib.parse
 import urllib.request
-def pakasir_create(order_id: str, amount: int):
-    url = "https://app.pakasir.com/api/create"
-
-    payload = urllib.parse.urlencode({
-        "api_key": PAKASIR_API_KEY,
-        "project": PAKASIR_PROJECT,
-        "amount": amount,
-        "order_id": order_id,
-        "qris_only": 1
-    }).encode()
-
-    try:
-        req = urllib.request.Request(url, data=payload)
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode())
-
-        return data
-
-    except Exception as e:
-        print("PAKASIR ERROR:", e)
-        return {"qr_url": QR_IMAGE_URL}
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
