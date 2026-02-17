@@ -1496,7 +1496,9 @@ def api_order(order_id: str):
         req = urllib.request.Request(url, data=payload)
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
+
         return data
+
     except Exception as e:
         print("PAKASIR ERROR:", e)
         return {"qr_url": QR_IMAGE_URL}
@@ -1636,4 +1638,4 @@ async def api_create_order(payload: dict):
         "order_id": order_id,
         "qr_url": qr_url,
         "amount": total
-}
+    }
