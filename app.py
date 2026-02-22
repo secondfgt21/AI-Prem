@@ -1115,7 +1115,7 @@ btn.onclick = async () => {
 </script>
 
     <div class="muted" style="margin-top:12px;">
-      Simpan akun email ini. Jangan dibagikan ke orang lain.
+      Cukup ganti password saja, jangan menambahkan email atau nomor pemulihan. Kalau masih ngeyel dan akun kena verif, saya tidak tanggung jawab
     </div>
   </div>
 
