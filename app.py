@@ -57,7 +57,7 @@ PRODUCT_FEATS = {
 
 QR_IMAGE_URL = os.getenv(
     "QR_IMAGE_URL",
-    "https://i.postimg.cc/qRkr7LcJ/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png",
+    "https://i.ibb.co.com/fGKd9LT4/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png",
 )
 
 ORDER_TTL_MINUTES = 15  # auto cancel kalau belum bayar
