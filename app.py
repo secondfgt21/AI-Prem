@@ -40,7 +40,7 @@ def _tpl_render(tpl, **kw) -> str:
 # CONFIG
 # ======================
 BRAND_NAME = "Impura"
-BRAND_TAGLINE = "Menyediakan berbagai layanan AI Premium"
+BRAND_TAGLINE = "Tempat beli AI Premium"
 LOGO_URL = os.getenv(
     "LOGO_URL",
     "https://i.ibb.co.com/27YZkLgJ/logo-impura.jpg",
@@ -755,8 +755,7 @@ HOME_HTML = Template(r"""<!doctype html>
           <h1>$brand_name</h1>
           <p>$brand_tagline</p>
         </div>
-      </div>
-      <div class="header-chip">Layanan AI Premium • Fast Checkout</div>
+      </div>      
     </div>
   </header>
 
@@ -820,7 +819,6 @@ HOME_HTML = Template(r"""<!doctype html>
 
       <footer class="footer">
         <div>© $year impura</div>
-        <div>Desain tema merah & hitam</div>
       </footer>
     </div>
   </main>
@@ -1082,11 +1080,11 @@ PAY_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Pembayaran QRIS</h1>
     <div class="muted">Produk: <b>$product_name</b></div>
-    <div class="muted">Qty: <b>$qty</b> × Rp $unit = <b>Rp $subtotal</b></div>
+    <div class="muted">Jumlah: <b>$qty</b></div>
 
     <div style="margin-top:12px;">Total transfer:</div>
     <div class="total">Rp $total</div>
-    <div class="muted">termasuk kode unik untuk verifikasi</div>
+    <div class="muted">Transfer sesuai nominal untuk verifikasi</div>
 
     <div style="margin-top:14px;">Scan QRIS:</div>
     <div class="qris"><img src="$qris" alt="QRIS"/></div>
@@ -1262,7 +1260,7 @@ STATUS_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Status Order</h1>
     <div class="muted">Produk: <b>$pid</b></div>
-    <div class="muted">Qty: <b>$qty</b></div>
+    <div class="muted">Jumlah: <b>$Jumlah</b></div>
     <div class="muted">Nominal: <b>Rp $amount</b></div>
 
     <div class="badge"><span id="st">$st</span> <span class="spin" title="auto cek"></span></div>
