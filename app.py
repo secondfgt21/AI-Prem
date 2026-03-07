@@ -240,14 +240,12 @@ HOME_HTML = Template(r"""<!doctype html>
       min-height:100vh;
     }
     a{color:inherit}
-    .wrap{
-      width:100%;
-      max-width:1200px;
-      margin:0 auto;
-      padding:20px 18px 90px;
-    }
-    @media (min-width: 900px){
-      .wrap{ padding:26px 28px 60px; }
+    
+        .wrap{
+      width: 100%;
+      max-width: 100%; /* Ubah dari 1200px ke 100% */
+      margin: 0;
+      padding: 20px 40px 90px; /* Tambah padding samping agar tidak terlalu mepet tembok */
     }
 
     .top{
@@ -888,11 +886,13 @@ STATUS_HTML = Template(r"""<!doctype html>
       animation: spin 1s linear infinite;
     }
     @keyframes spin{to{transform:rotate(360deg)}}
-    .grid{
-      margin-top:16px;
-      display:grid;
-      grid-template-columns: repeat(2, minmax(0,1fr));
-      gap:10px;
+        .grid{
+      display: grid;
+      gap: 20px;
+      /* Menggunakan auto-fill agar kartu memenuhi ruang yang tersedia */
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); 
+      align-items: stretch;
+      width: 100%;
     }
     .mini{
       background:rgba(255,255,255,.04);
@@ -1104,24 +1104,31 @@ VOUCHER_HTML = Template(r"""<!doctype html>
     <div class="code" id="vcode">$code</div>
 
     <script>
+const btn = document.querySelector('.btn');
+const vcode = document.getElementById('vcode');
+
 btn.onclick = async () => {
-  const text = code;
+  const text = vcode.innerText;
 
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(text);
-  } else {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    btn.innerText = "✅ Tersalin";
+  } catch (err) {
+    btn.innerText = "❌ Gagal Salin";
   }
-
-  btn.innerText="✅ Tersalin";
-  setTimeout(()=>btn.innerText="Salin Email",1500);
+  setTimeout(() => btn.innerText = "Salin Email", 1500);
 };
 </script>
+
 
     <div class="muted" style="margin-top:12px;">
       Cukup ganti password saja, jangan menambahkan email atau nomor pemulihan. Kalau masih ngeyel dan akun kena verif, saya tidak tanggung jawab
