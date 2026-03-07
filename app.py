@@ -57,7 +57,7 @@ PRODUCT_FEATS = {
 
 QR_IMAGE_URL = os.getenv(
     "QR_IMAGE_URL",
-    "https://i.ibb.co.com/fGKd9LT4/Kode-QRIS-WARUNG-MAKMUR-ABADI-CIANJUR-1.png",
+    "https://i.ibb.co.com/DDts2dZW/IMG-20260308-062026.jpg",
 )
 
 LOGO_IMAGE_URL = os.getenv(
@@ -893,22 +893,16 @@ HOME_HTML = Template(r"""<!doctype html>
           <div class="tag">Layanan AI premium dengan tampilan lebih profesional, cepat, dan rapi.</div>
         </div>
       </div>
-      <div class="nav-pill">
-        <div class="pill">⚡ Fast checkout</div>
-        <div class="pill">🔒 QRIS aman</div>
-        <a class="pill cta" href="#produk">Lihat Produk</a>
-      </div>
     </div>
   </header>
 
   <div class="wrap">
     <div class="hero">
       <div class="card heroL reveal">
-        <div class="eyebrow"><span class="dot"></span> Cyber red premium storefront</div>
-        <div class="title">Beli akses AI premium dengan nuansa <span class="accent">lebih mewah & tegas</span>.</div>
+        <div class="eyebrow"><span class="dot"></span> Harga termurah se Indonesia</div>
+        <div class="title"><span class="accent">Beli Akses AI Premium dengan proses cepat</span>.</div>
         <div class="sub">
           Pilih produk → bayar QRIS → tunggu verifikasi → sistem otomatis kirim akun email.
-          Sekarang tampilannya dibuat lebih premium dengan gaya cyber merah hitam yang lebih kuat di desktop maupun mobile.
         </div>
         <div class="actions">
           <a class="btn primary" href="#produk">Lihat Produk</a>
@@ -917,7 +911,7 @@ HOME_HTML = Template(r"""<!doctype html>
         <div class="hero-metrics">
           <div class="metric"><b>QRIS</b><span>Pembayaran cepat dan jelas tanpa langkah rumit.</span></div>
           <div class="metric"><b>Otomatis</b><span>Status order dan alur pembelian terasa lebih rapi.</span></div>
-          <div class="metric"><b>Premium</b><span>Tampilan merah hitam lebih cocok dengan identitas brand.</span></div>
+          <div class="metric"><b>Private</b><span>Semua benefit untuk sendiri tidak berbagi atau rame-rame.</span></div>
           <div class="metric"><b>Support</b><span>Admin tetap mudah dihubungi lewat tombol chat.</span></div>
         </div>
       </div>
@@ -925,20 +919,15 @@ HOME_HTML = Template(r"""<!doctype html>
       <div class="card heroR reveal" id="cara">
         <div class="steps-head">
           <div class="steps-title">Cara beli (3 langkah)</div>
-          <div class="mini-status">UI baru • sticky header</div>
         </div>
         <div class="step"><div class="num">1</div><div><b>Pilih produk</b><span>Klik tombol beli pada produk yang kamu inginkan, lalu atur jumlah pembelian dengan cepat.</span></div></div>
         <div class="step"><div class="num">2</div><div><b>Bayar QRIS</b><span>Transfer sesuai nominal. Tampilan baru dibuat lebih kontras supaya fokus user tetap ke aksi utama.</span></div></div>
         <div class="step"><div class="num">3</div><div><b>Verifikasi</b><span>Setelah pembayaran masuk, sistem akan meneruskan user ke halaman akun email secara otomatis.</span></div></div>
-        <div class="tip">
-          Tip: header akan tetap muncul saat user scroll, jadi navigasi ke produk dan cara beli tetap mudah terlihat kapan pun.
-        </div>
       </div>
     </div>
 
     <div class="section-head reveal">
       <div class="section" id="produk">Produk tersedia</div>
-      <div class="section-sub">Card produk dibuat lebih premium, fitur tidak lagi menyatu dalam satu kotak, dan spacing kiri-kanan lebih pas di mobile maupun desktop.</div>
     </div>
     <div class="grid">
       $cards
@@ -1174,11 +1163,11 @@ PAY_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Pembayaran QRIS</h1>
     <div class="muted">Produk: <b>$product_name</b></div>
-    <div class="muted">Qty: <b>$qty</b> × Rp $unit = <b>Rp $subtotal</b></div>
+    <div class="muted">Jumlah: <b>$qty</b></div>
 
     <div style="margin-top:12px;">Total transfer:</div>
     <div class="total">Rp $total</div>
-    <div class="muted">termasuk kode unik untuk verifikasi</div>
+    <div class="muted">Transfer sesuai nominal untuk verifikasi</div>
 
     <div style="margin-top:14px;">Scan QRIS:</div>
     <div class="qris"><img src="$qris" alt="QRIS"/></div>
@@ -1329,7 +1318,7 @@ STATUS_HTML = Template(r"""<!doctype html>
   <div class="box">
     <h1>Status Order</h1>
     <div class="muted">Produk: <b>$pid</b></div>
-    <div class="muted">Qty: <b>$qty</b></div>
+    <div class="muted">Jumlah: <b>$qty</b></div>
     <div class="muted">Nominal: <b>Rp $amount</b></div>
 
     <div class="badge"><span id="st">$st</span> <span class="spin" title="auto cek"></span></div>
@@ -1585,7 +1574,7 @@ def home():
               <div>{hot}</div>
             </div>
 
-            <div class="price">Rp {rupiah(int(p["price"]))}<small>/ lisensi</small></div>
+            <div class="price">Rp {rupiah(int(p["price"]))}<small>/ Akun</small></div>
             <div class="feats">{feats_html}</div>
 
             <div class="buyrow">
