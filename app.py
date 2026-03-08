@@ -890,7 +890,7 @@ HOME_HTML = Template(r"""<!doctype html>
         </div>
         <div class="brand-copy">
           <h1>Impura</h1>
-          <div class="tag">Layanan AI premium dengan tampilan lebih profesional, cepat, dan rapi.</div>
+          <div class="tag">Menyediakan Berbagai Layanan AI Premium</div>
         </div>
       </div>
     </div>
@@ -935,7 +935,6 @@ HOME_HTML = Template(r"""<!doctype html>
 
     <div class="footer">
       <div>© $year impura</div>
-      <div>Cyber red UI • premium storefront</div>
     </div>
   </div>
 
