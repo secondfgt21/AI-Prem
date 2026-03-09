@@ -2,7 +2,6 @@ import os
 import uuid
 import random
 import time
-import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Tuple
 from string import Template
@@ -11,6 +10,9 @@ from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from supabase import create_client, Client
 
+# ======================
+# ENV (Render -> Environment Variables)
+# ======================
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "ganti-tokenmu")
@@ -22,6 +24,10 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 app = FastAPI()
 
 
+# =========================
+# Safe template renderer (avoid string.Template parsing errors)
+# We only replace our own $placeholders like $cards, $year, etc.
+# =========================
 def _tpl_render(tpl, **kw) -> str:
     s = tpl.template if hasattr(tpl, "template") else str(tpl)
     for k, v in kw.items():
@@ -29,109 +35,66 @@ def _tpl_render(tpl, **kw) -> str:
         s = s.replace(f"${k}", str(v))
     return s
 
-
+# ======================
+# CONFIG
+# ======================
 PRODUCTS = {
-    "gemini": {
-        "name": "Gemini AI Pro 1 Tahun",
-        "group": "gemini",
-        "badge": "ðŸ”¥ TERLARIS",
-        "price": 34_000,
-        "features": [
-            "Akses penuh Gemini AI Pro",
-            "Google Drive 2TB",
-            "Flow + 1.000 credit",
-            "Akses Antigravity",
-        ],
+    "gemini": {"name": "Gemini AI Pro 1 Tahun", "price": 34_000,
+        "features": ['Akses penuh Gemini AI Pro', 'Google Drive 2TB', 'Flow + 1.000 credit', 'Aktivasi cepat']
     },
-    "gemini3b": {
-        "name": "Gemini AI Pro 3 Bulan",
-        "group": "gemini",
-        "badge": "âš¡ FLEXIBLE",
-        "price": 17_000,
-        "features": [
-            "Gemini AI Pro aktif 3 bulan",
-            "Cocok untuk coba premium",
-            "Akses cepat & stabil",
-            "Aktivasi cepat",
-        ],
-    },
-    "chatgpt": {
-        "name": "ChatGPT Plus 1 Bulan",
-        "group": "chatgpt",
-        "badge": "ðŸ’Ž PREMIUM",
-        "price": 14_000,
-        "features": [
-            "Akses model ChatGPT terbaru",
-            "Respons lebih cepat & akurat",
-            "Cocok untuk riset & coding",
-            "Aktivasi cepat",
-        ],
+    "chatgpt": {"name": "ChatGPT Plus 1 Bulan", "price": 14_000,
+        "features": ['Akses model ChatGPT terbaru', 'Respons lebih cepat & akurat', 'Cocok untuk riset & coding', 'Aktivasi cepat']
     },
 }
 
-PRODUCT_GROUPS = {
-    "gemini": {
-        "title": "Gemini AI Pro",
-        "description": "Pilih varian Gemini yang paling cocok untuk kebutuhanmu.",
-        "variants": ["gemini", "gemini3b"],
-    },
-    "chatgpt": {
-        "title": "ChatGPT Plus",
-        "description": "Akun premium siap pakai untuk kebutuhan harian, kerja, dan riset.",
-        "variants": ["chatgpt"],
-    },
+
+# Per-product fitur/benefit (beda produk beda isi)
+# Isi list ini akan ditampilkan sebagai 1 kotak (1 div) dengan teks turun ke bawah (line break)
+PRODUCT_FEATS = {
+    # Contoh: sesuaikan key dengan id produk di PRODUCTS (pid)
+    # "gemini": ["...", "..."],
 }
 
 QR_IMAGE_URL = os.getenv(
     "QR_IMAGE_URL",
-    "https://i.ibb.co.com/FkNWgprm/IMG-20260308-062026.jpg",
+    "https://i.ibb.co.com/DDts2dZW/IMG-20260308-062026.jpg",
 )
-LOGO_URL = os.getenv(
-    "LOGO_URL",
+
+LOGO_IMAGE_URL = os.getenv(
+    "LOGO_IMAGE_URL",
     "https://i.ibb.co.com/3m2fyH71/Picsart-24-11-05-00-57-51-857.jpg",
 )
-WHATSAPP_URL = os.getenv("WHATSAPP_URL", "https://wa.me/6280000000000")
-TELEGRAM_URL = os.getenv("TELEGRAM_URL", "https://t.me/impuraid")
 
-ORDER_TTL_MINUTES = 15
+ORDER_TTL_MINUTES = 15  # auto cancel kalau belum bayar
 RATE_WINDOW_SEC = 5 * 60
-RATE_MAX_CHECKOUT = 6
+RATE_MAX_CHECKOUT = 6  # anti spam: max 6 order baru / 5 menit / IP
 
+# In-memory anti-spam (cukup untuk Render single instance)
 _IP_BUCKET: Dict[str, list] = {}
 _VISITOR_SESS: Dict[str, float] = {}
-_VISITOR_BASE = 120
-_ACTIVE_USERS_BASE = 187
-_TODAY_SUCCESS_BASE = 46
+_VISITOR_BASE = 120  # tampilan marketing saja (bukan analytics akurat)
 
-FAQ_ITEMS = [
-    ("Apakah akun yang dijual bergaransi?", "Ya. Semua produk yang dijual bergaransi."),
-    ("Berapa lama proses verifikasi pembayaran?", "Biasanya 1â€“5 menit. Saat sedang ramai, proses bisa sedikit lebih lama."),
-    ("Kenapa nominal transfer harus persis?", "Karena sistem menggunakan nominal unik untuk mencocokkan pembayaran. Jangan dibulatkan atau dikurangi."),
-    ("Bagaimana cara cek status pesanan?", "Masuk ke menu Cek Order lalu masukkan Order ID kamu untuk melihat status terbaru."),
-    ("Kalau ada kendala setelah pembelian bagaimana?", "Hubungi admin melalui WhatsApp atau Telegram yang tersedia di website agar dibantu lebih cepat."),
-]
-
-
+# ======================
+# Helpers
+# ======================
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
-
 
 def rupiah(n: int) -> str:
     return f"{n:,}"
 
-
 def require_admin(token: Optional[str]) -> bool:
     return token == ADMIN_TOKEN
 
-
 def _client_ip(request: Request) -> str:
+    # Render biasanya set X-Forwarded-For
     xff = request.headers.get("x-forwarded-for")
     if xff:
         return xff.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
-
 def _rate_limit_checkout(ip: str) -> bool:
+    """Return True kalau boleh lanjut, False kalau kena limit."""
     t = time.time()
     bucket = _IP_BUCKET.get(ip, [])
     bucket = [x for x in bucket if (t - x) < RATE_WINDOW_SEC]
@@ -142,11 +105,11 @@ def _rate_limit_checkout(ip: str) -> bool:
     _IP_BUCKET[ip] = bucket
     return True
 
-
 def _parse_dt(s: str) -> Optional[datetime]:
     if not s:
         return None
     try:
+        # Supabase biasanya ISO8601
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -154,11 +117,15 @@ def _parse_dt(s: str) -> Optional[datetime]:
     except Exception:
         return None
 
-
 def _ensure_not_expired(order: dict) -> Tuple[dict, bool]:
+    """
+    Kalau pending & lebih dari TTL -> auto-cancel di DB.
+    return (order_after, expired_bool)
+    """
     st = (order.get("status") or "pending").lower()
     if st != "pending":
         return order, False
+
     created = _parse_dt(order.get("created_at", "")) or now_utc()
     if now_utc() - created > timedelta(minutes=ORDER_TTL_MINUTES):
         try:
@@ -169,8 +136,10 @@ def _ensure_not_expired(order: dict) -> Tuple[dict, bool]:
         return order, True
     return order, False
 
-
 def get_stock_map() -> Dict[str, int]:
+    """
+    Hitung stok realtime dari table vouchers: status='available'
+    """
     stock = {pid: 0 for pid in PRODUCTS.keys()}
     try:
         res = supabase.table("vouchers").select("product_id").eq("status", "available").execute()
@@ -182,9 +151,13 @@ def get_stock_map() -> Dict[str, int]:
         print("[STOCK] err:", e)
     return stock
 
-
 def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Optional[list[str]]:
+    """
+    Ambil voucher sejumlah qty (status='available') untuk product_id,
+    set jadi used, lalu simpan ke order (voucher_code newline-separated).
+    """
     qty = max(1, int(qty))
+
     v = (
         supabase.table("vouchers")
         .select("id,code")
@@ -194,10 +167,14 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
         .limit(qty)
         .execute()
     )
+
     if not v.data or len(v.data) < qty:
         return None
+
     ids = [row["id"] for row in v.data]
     codes = [row["code"] for row in v.data]
+
+    # set voucher jadi used
     q = supabase.table("vouchers").update({"status": "used"})
     if hasattr(q, "in_"):
         q = q.in_("id", ids)
@@ -205,951 +182,1433 @@ def claim_vouchers_for_order(order_id: str, product_id: str, qty: int) -> Option
     else:
         for vid in ids:
             supabase.table("vouchers").update({"status": "used"}).eq("id", vid).execute()
+
+    # set order jadi paid + simpan codes voucher (newline-separated)
     supabase.table("orders").update({
         "status": "paid",
         "voucher_code": "\n".join(codes) if codes else None,
     }).eq("id", order_id).execute()
-    return codes
 
+    return codes
 
 def voucher_lines(v: str | None) -> list[str]:
     txt = (v or "").strip()
     if not txt:
         return []
     return [line.strip() for line in txt.splitlines() if line.strip()]
-
-
-def get_sales_stats() -> dict:
-    sold = {pid: 0 for pid in PRODUCTS.keys()}
-    total_success = 0
-    try:
-        res = supabase.table("orders").select("product_id,qty,status,created_at").execute()
-        today = now_utc().date()
-        today_success = 0
-        for row in (res.data or []):
-            st = (row.get("status") or "").lower()
-            if st != "paid":
-                continue
-            qty = int(row.get("qty") or 1)
-            pid = row.get("product_id")
-            total_success += qty
-            if pid in sold:
-                sold[pid] += qty
-            dt = _parse_dt(row.get("created_at", ""))
-            if dt and dt.astimezone(timezone.utc).date() == today:
-                today_success += qty
-        return {
-            "sold": sold,
-            "total_success": total_success,
-            "today_success": today_success,
-            "active_users": _ACTIVE_USERS_BASE + total_success * 3,
-        }
-    except Exception as e:
-        print("[STATS] err:", e)
-        return {
-            "sold": sold,
-            "total_success": 0,
-            "today_success": 0,
-            "active_users": _ACTIVE_USERS_BASE,
-        }
-
-
-def build_faq_items() -> str:
-    out = []
-    for q, a in FAQ_ITEMS:
-        out.append(
-            f"<details class='faq-item reveal'><summary>{q}</summary><div class='faq-answer'>{a}</div></details>"
-        )
-    return "\n".join(out)
-
-
-def build_home_cards(stock: dict, stats: dict) -> str:
-    cards = []
-    for group_id, group in PRODUCT_GROUPS.items():
-        variants_html = []
-        for pid in group["variants"]:
-            p = PRODUCTS[pid]
-            stok = int(stock.get(pid, 0))
-            sold = int(stats["sold"].get(pid, 0))
-            features = "".join(
-                f"<div class='feature-chip'><span class='devil'>ðŸ˜ˆ</span><span>{feat}</span></div>" for feat in p["features"]
-            )
-            disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
-            variants_html.append(
-                f"""
-                <div class="variant-panel" data-variant-panel="{pid}">
-                    <div class="variant-meta-row">
-                        <span class="pill badge">{p['badge']}</span>
-                        <span class="pill">Terjual {sold}</span>
-                        <span class="pill" id="stock-{pid}">Stok {stok}</span>
-                    </div>
-                    <div class="price-line">
-                        <div class="price">Rp {rupiah(int(p['price']))}</div>
-                        <div class="subprice">Nominal unik dibuat otomatis saat checkout</div>
-                    </div>
-                    <div class="feature-grid">{features}</div>
-                    <div class="buyrow">
-                        <div class="qtybox" data-qtybox="{pid}">
-                            <button class="qtybtn" type="button" data-act="minus" data-pid="{pid}" {disabled_attr}>âˆ’</button>
-                            <span class="qtyval" data-qty="{pid}">1</span>
-                            <button class="qtybtn" type="button" data-act="plus" data-pid="{pid}" {disabled_attr}>+</button>
-                        </div>
-                        <button class="btn btn-buy glitch-btn" type="button" data-buy="{pid}" {disabled_attr}>Beli Sekarang</button>
-                    </div>
-                    <div class="micro-note">{('Stok habis.' if stok <= 0 else 'Bayar QRIS â†’ tunggu verifikasi â†’ akun dikirim otomatis setelah dicek admin')}</div>
-                </div>
-                """
-            )
-
-        selector = ""
-        if len(group["variants"]) > 1:
-            opts = "".join(
-                f"<option value='{pid}'>{PRODUCTS[pid]['name']} â€” Rp {rupiah(int(PRODUCTS[pid]['price']))}</option>"
-                for pid in group["variants"]
-            )
-            selector = f"""
-            <label class="variant-selector-wrap">
-                <span class="selector-label">Pilih Varian</span>
-                <select class="variant-selector" data-group-selector="{group_id}">{opts}</select>
-            </label>
-            """
-
-        cards.append(
-            f"""
-            <article class="product-card reveal" id="produk-{group_id}" data-group="{group_id}">
-                <div class="card-head">
-                    <div>
-                        <div class="eyebrow">IMPURA CYBER STORE</div>
-                        <h3>{group['title']}</h3>
-                        <p>{group['description']}</p>
-                    </div>
-                    <div class="orb"></div>
-                </div>
-                {selector}
-                <div class="variant-stack" data-group-stack="{group_id}">
-                    {''.join(variants_html)}
-                </div>
-            </article>
-            """
-        )
-    return "\n".join(cards)
-
-
+# ======================
+# Templates
+# ======================
 HOME_HTML = Template(r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YGSFDD04M4"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YGSFDD04M4');
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Impura â€” AI Premium Store</title>
-  <meta name="description" content="Impura menyediakan berbagai layanan AI premium dengan tampilan cyber neon merah hitam, pembayaran QRIS, dan proses order cepat."/>
+  <title>Impura</title>
   <style>
     :root{
-      color-scheme:dark;
-      --bg:#050506;
-      --bg-soft:#0a0a0d;
-      --panel:#0f1015;
-      --panel-2:rgba(255,255,255,.05);
-      --line:rgba(255,75,75,.16);
-      --text:#f6f7fb;
-      --muted:#c9cfdb;
-      --muted-2:#97a0b2;
-      --red:#ff2d55;
-      --red-2:#ff4b4b;
-      --red-3:#ff1744;
-      --glow:rgba(255,45,85,.38);
-      --shadow:0 18px 80px rgba(0,0,0,.55),0 0 24px rgba(255,45,85,.16);
-      --success:#2ee6a6;
-      --warning:#ffd166;
+      --bg:#050507;
+      --bg-2:#0b0b0f;
+      --panel:rgba(17,17,22,.82);
+      --panel-soft:rgba(255,255,255,.04);
+      --panel-strong:rgba(255,255,255,.06);
+      --line:rgba(255,255,255,.10);
+      --line-strong:rgba(255,90,90,.18);
+      --text:#f7f7fb;
+      --muted:rgba(255,255,255,.70);
+      --red-1:#ff2b2b;
+      --red-2:#c50017;
+      --red-3:#ff6a6a;
+      --red-glow:rgba(255,43,43,.28);
+      --shadow:0 20px 60px rgba(0,0,0,.50);
+      --shadow-soft:0 16px 36px rgba(0,0,0,.35);
       --radius:24px;
       --radius-sm:16px;
-      --maxw:1320px;
+      --container:1360px;
+      --header-h:88px;
     }
     *{box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{
       margin:0;
-      font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
       color:var(--text);
       background:
-        radial-gradient(circle at top left, rgba(255,35,73,.22), transparent 33%),
-        radial-gradient(circle at top right, rgba(255,75,75,.13), transparent 28%),
-        radial-gradient(circle at bottom center, rgba(255,45,85,.10), transparent 35%),
-        linear-gradient(180deg,#050506,#09090d 32%,#050506 100%);
+        radial-gradient(760px 420px at 10% -10%, rgba(255,0,51,.18), transparent 60%),
+        radial-gradient(980px 520px at 100% 0%, rgba(150,0,0,.16), transparent 55%),
+        radial-gradient(820px 520px at 50% 100%, rgba(255,40,40,.08), transparent 58%),
+        linear-gradient(180deg, #08080b 0%, #050507 100%);
       min-height:100vh;
-      position:relative;
       overflow-x:hidden;
     }
-    body::before{
+    body:before{
       content:"";
-      position:fixed;inset:0;pointer-events:none;z-index:2;
-      background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0px, rgba(255,255,255,.025) 1px, transparent 3px, transparent 6px);
-      mix-blend-mode:soft-light;
-      opacity:.27;
+      position:fixed; inset:0;
+      background:
+        linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: radial-gradient(circle at center, #000 40%, transparent 95%);
+      pointer-events:none;
+      opacity:.45;
+      z-index:0;
     }
-    body::after{
+    a{color:inherit}
+    .site-header{
+      position:sticky;
+      top:0;
+      z-index:1000;
+      backdrop-filter: blur(18px);
+      background:linear-gradient(180deg, rgba(8,8,12,.92), rgba(8,8,12,.72));
+      border-bottom:1px solid rgba(255,255,255,.07);
+      box-shadow:0 12px 24px rgba(0,0,0,.18);
+    }
+    .header-inner,
+    .wrap{
+      width:min(var(--container), calc(100vw - 28px));
+      margin:0 auto;
+      position:relative;
+      z-index:1;
+    }
+    .header-inner{
+      min-height:var(--header-h);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+      padding:14px 0;
+    }
+    .wrap{
+      padding:26px 0 96px;
+    }
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:14px;
+      min-width:0;
+    }
+    .logo-shell{
+      position:relative;
+      width:56px;
+      height:56px;
+      border-radius:999px;
+      padding:3px;
+      background:linear-gradient(135deg, rgba(255,106,106,.95), rgba(197,0,23,.85));
+      box-shadow:0 0 0 1px rgba(255,255,255,.10), 0 0 28px rgba(255,43,43,.26);
+      flex:0 0 auto;
+      animation: pulseGlow 3.8s ease-in-out infinite;
+    }
+    .logo-shell:after{
       content:"";
-      position:fixed;inset:0;pointer-events:none;z-index:1;
-      background:linear-gradient(120deg,transparent 0%,rgba(255,45,85,.03) 50%,transparent 100%);
-      animation:bgMove 12s linear infinite;
+      position:absolute;
+      inset:-8px;
+      border-radius:999px;
+      background:radial-gradient(circle, rgba(255,43,43,.26), transparent 70%);
+      z-index:-1;
+      filter:blur(10px);
     }
-    @keyframes bgMove { from{transform:translateX(-6%)} to{transform:translateX(6%)} }
-    a{color:inherit;text-decoration:none}
-    img{max-width:100%;display:block}
-    .container{max-width:var(--maxw);margin:0 auto;padding:0 20px}
-    .sticky-header{
-      position:sticky;top:0;z-index:100;
-      backdrop-filter:blur(16px);
-      background:rgba(5,5,8,.68);
-      border-bottom:1px solid var(--line);
-      box-shadow:0 14px 34px rgba(0,0,0,.22);
-    }
-    .header-inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
-    .brand{display:flex;align-items:center;gap:12px;min-width:0}
-    .menu-btn,.icon-btn,.copy-btn,.qtybtn,.zoom-fab{
-      border:1px solid rgba(255,75,75,.18);
-      background:rgba(255,255,255,.04);
-      color:var(--text);
-      border-radius:14px;
-      cursor:pointer;
-      transition:.25s ease;
-    }
-    .menu-btn{width:46px;height:46px;display:grid;place-items:center;box-shadow:0 0 0 1px rgba(255,45,85,.06), 0 0 22px rgba(255,45,85,.14)}
-    .menu-btn:hover,.icon-btn:hover,.copy-btn:hover,.qtybtn:hover,.zoom-fab:hover{transform:translateY(-1px);box-shadow:0 0 26px rgba(255,45,85,.22)}
     .logo{
-      width:48px;height:48px;border-radius:50%;object-fit:cover;
-      border:2px solid rgba(255,75,75,.5);
-      box-shadow:0 0 0 4px rgba(255,45,85,.08),0 0 26px rgba(255,45,85,.24);
+      width:100%;
+      height:100%;
+      border-radius:999px;
+      display:block;
+      object-fit:cover;
+      background:#110608;
     }
-    .brand-text{min-width:0}
-    .brand-text strong{display:block;font-size:1rem;letter-spacing:.04em;text-transform:uppercase;text-shadow:0 0 18px rgba(255,45,85,.34)}
-    .brand-text span{display:block;color:var(--muted-2);font-size:.84rem}
-    .header-actions{display:flex;gap:10px;align-items:center}
-    .nav-chip{padding:11px 14px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--muted);display:none}
-
-    .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.56);backdrop-filter:blur(2px);opacity:0;pointer-events:none;transition:.28s ease;z-index:120}
-    .drawer{position:fixed;top:0;left:0;height:100vh;width:min(86vw,360px);background:rgba(10,10,14,.97);border-right:1px solid var(--line);box-shadow:30px 0 80px rgba(0,0,0,.5);transform:translateX(-105%);transition:.3s ease;z-index:130;padding:18px}
-    .drawer.open{transform:translateX(0)}
-    .drawer-backdrop.open{opacity:1;pointer-events:auto}
-    .drawer-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-    .drawer-nav a{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);margin-bottom:12px}
-    .drawer-nav a:hover{border-color:rgba(255,75,75,.35);box-shadow:0 0 26px rgba(255,45,85,.16)}
-
-    .hero{padding:34px 0 18px;position:relative}
-    .hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;align-items:stretch}
-    .hero-card,.hero-side,.glass{background:linear-gradient(180deg, rgba(18,18,24,.93), rgba(10,10,14,.88));border:1px solid rgba(255,75,75,.16);border-radius:var(--radius);box-shadow:var(--shadow);position:relative;overflow:hidden}
-    .hero-card{padding:30px}
-    .hero-card::before,.hero-side::before,.product-card::before,.glass::before{
-      content:"";position:absolute;inset:auto auto -24px -10px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle, rgba(255,45,85,.22), transparent 70%);filter:blur(8px)
+    .brand-copy{min-width:0}
+    .brand h1{
+      margin:0;
+      font-size:clamp(18px, 2.6vw, 24px);
+      letter-spacing:.2px;
+      line-height:1.1;
     }
-    .eyebrow{display:inline-flex;gap:8px;align-items:center;padding:9px 14px;border-radius:999px;background:rgba(255,45,85,.10);border:1px solid rgba(255,75,75,.24);color:#ffe0e5;text-transform:uppercase;letter-spacing:.16em;font-size:.72rem;box-shadow:0 0 22px rgba(255,45,85,.12)}
-    .hero h1{font-size:clamp(2rem,4vw,4.4rem);line-height:1.02;margin:18px 0 14px;letter-spacing:-.04em;text-shadow:0 0 24px rgba(255,45,85,.22)}
-    .hero .lead{font-size:1.02rem;color:var(--muted);max-width:760px;line-height:1.8}
-    .typing-wrap{display:flex;align-items:center;gap:10px;color:#ffd5dc;font-weight:700;min-height:34px;text-shadow:0 0 14px rgba(255,45,85,.18)}
-    .typing-cursor{display:inline-block;width:10px;height:1.2em;background:var(--red-2);box-shadow:0 0 16px rgba(255,45,85,.5);animation:blink 1s steps(1) infinite}
-    @keyframes blink{50%{opacity:0}}
-    .hero-actions{display:flex;flex-wrap:wrap;gap:14px;margin-top:22px}
-    .btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:14px 18px;border:none;border-radius:16px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-decoration:none;transition:.25s ease;overflow:hidden}
-    .btn-primary{background:linear-gradient(135deg, var(--red-3), var(--red-2));color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 0 28px rgba(255,45,85,.24), inset 0 0 16px rgba(255,255,255,.08)}
-    .btn-secondary{background:rgba(255,255,255,.045);color:var(--text);border:1px solid rgba(255,255,255,.08)}
-    .btn:hover{transform:translateY(-2px)}
-    .glitch-btn:hover::before,.glitch-btn:hover::after{content:attr(data-label);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:inherit;animation:glitch .32s linear 2}
-    .glitch-btn:hover::before{transform:translate(-2px,0);text-shadow:2px 0 #00e5ff}
-    .glitch-btn:hover::after{transform:translate(2px,0);text-shadow:-2px 0 #ffea00}
-    @keyframes glitch{
-      0%{clip-path:inset(0 0 85% 0)}
-      25%{clip-path:inset(18% 0 42% 0)}
-      50%{clip-path:inset(46% 0 18% 0)}
-      75%{clip-path:inset(70% 0 8% 0)}
-      100%{clip-path:inset(0 0 85% 0)}
+    .tag{
+      margin-top:4px;
+      color:var(--muted);
+      font-size:13px;
+      max-width:60ch;
     }
-    .stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:26px}
-    .stat{padding:16px;border-radius:18px;background:rgba(255,255,255,.035);border:1px solid rgba(255,75,75,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),0 0 24px rgba(255,45,85,.08)}
-    .stat strong{display:block;font-size:1.5rem;text-shadow:0 0 16px rgba(255,45,85,.2)}
-    .stat span{display:block;color:var(--muted-2);font-size:.9rem;margin-top:6px}
+    .nav-pill{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .pill{
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.035);
+      padding:11px 14px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .pill.cta{
+      background:linear-gradient(135deg, var(--red-1), var(--red-2));
+      color:#fff;
+      border-color:transparent;
+      text-decoration:none;
+      font-weight:900;
+      box-shadow:0 12px 24px rgba(197,0,23,.22);
+      transition:transform .2s ease, box-shadow .2s ease;
+    }
+    .pill.cta:hover{transform:translateY(-2px); box-shadow:0 18px 34px rgba(197,0,23,.30)}
 
-    .hero-side{padding:22px;display:grid;gap:14px}
-    .mini-card{padding:18px;border-radius:20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)}
-    .mini-card h3{margin:0 0 8px;font-size:1rem}
-    .mini-list{display:grid;gap:10px}
-    .mini-list div{display:flex;gap:10px;align-items:flex-start;color:var(--muted)}
-    .devil{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 30% 30%, #ff8ba3, var(--red));box-shadow:0 0 16px rgba(255,45,85,.3);font-size:.9rem;flex:0 0 26px}
+    .hero{
+      display:grid;
+      grid-template-columns:minmax(0,1.2fr) minmax(340px,.8fr);
+      gap:18px;
+      align-items:stretch;
+      margin-top:8px;
+    }
+    .card,
+    .p{
+      position:relative;
+      overflow:hidden;
+      border-radius:var(--radius);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.028)),
+        rgba(11,11,15,.88);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:var(--shadow);
+      isolation:isolate;
+    }
+    .card:before,
+    .p:before{
+      content:"";
+      position:absolute;
+      inset:0;
+      background:
+        radial-gradient(520px 220px at 0% 0%, rgba(255,43,43,.18), transparent 60%),
+        radial-gradient(420px 220px at 100% 0%, rgba(197,0,23,.16), transparent 55%);
+      pointer-events:none;
+      opacity:.95;
+    }
+    .card:after,
+    .p:after{
+      content:"";
+      position:absolute;
+      inset:0;
+      border-radius:inherit;
+      padding:1px;
+      background:linear-gradient(135deg, rgba(255,88,88,.34), rgba(255,255,255,.05), rgba(145,0,0,.28));
+      -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite:xor;
+      mask-composite:exclude;
+      pointer-events:none;
+    }
+    .heroL{
+      padding:28px;
+      min-height:360px;
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+    }
+    .eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      width:max-content;
+      max-width:100%;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(255,255,255,.035);
+      color:rgba(255,255,255,.82);
+      border-radius:999px;
+      padding:10px 14px;
+      font-size:12px;
+      letter-spacing:.2px;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .eyebrow .dot{
+      width:8px; height:8px; border-radius:999px;
+      background:linear-gradient(135deg, var(--red-3), var(--red-2));
+      box-shadow:0 0 12px rgba(255,90,90,.5);
+      flex:0 0 auto;
+    }
+    .title{
+      font-size:clamp(32px, 5vw, 56px);
+      line-height:1.05;
+      margin:18px 0 12px;
+      max-width:12ch;
+      letter-spacing:-.04em;
+    }
+    .title .accent{
+      background:linear-gradient(180deg, #fff, #ff8f8f 120%);
+      -webkit-background-clip:text;
+      -webkit-text-fill-color:transparent;
+    }
+    .sub{
+      font-size:15px;
+      line-height:1.75;
+      color:var(--muted);
+      max-width:60ch;
+    }
+    .actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-top:22px;
+    }
+    .btn{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:14px 18px;
+      border-radius:16px;
+      text-decoration:none;
+      font-weight:900;
+      font-size:14px;
+      letter-spacing:.2px;
+      border:1px solid rgba(255,255,255,.10);
+      transition:transform .22s ease, box-shadow .22s ease, border-color .22s ease, background .22s ease;
+      position:relative;
+      overflow:hidden;
+      cursor:pointer;
+    }
+    .btn:hover{transform:translateY(-3px)}
+    .btn.primary{
+      background:linear-gradient(135deg, var(--red-1), var(--red-2));
+      color:#fff;
+      border-color:transparent;
+      box-shadow:0 16px 34px rgba(197,0,23,.28);
+    }
+    .btn.primary:hover{box-shadow:0 22px 42px rgba(197,0,23,.34)}
+    .btn.ghost{
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+    }
+    .hero-metrics{
+      display:grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+      gap:10px;
+      margin-top:22px;
+    }
+    .metric{
+      padding:14px 12px;
+      border-radius:18px;
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:var(--shadow-soft);
+      transform:translateY(0);
+      transition:transform .24s ease, border-color .24s ease;
+    }
+    .metric:hover{
+      transform:translateY(-3px);
+      border-color:rgba(255,106,106,.22);
+    }
+    .metric b{
+      display:block;
+      font-size:16px;
+      margin-bottom:4px;
+    }
+    .metric span{
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.4;
+    }
 
-    .section{padding:20px 0}
-    .section-head{display:flex;align-items:end;justify-content:space-between;gap:18px;margin-bottom:18px}
-    .section-head h2{margin:0;font-size:clamp(1.45rem,2.4vw,2.4rem)}
-    .section-head p{margin:0;color:var(--muted);max-width:740px;line-height:1.8}
+    .heroR{
+      padding:22px;
+      display:flex;
+      flex-direction:column;
+      justify-content:space-between;
+      gap:14px;
+    }
+    .steps-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:12px;
+      margin-bottom:4px;
+    }
+    .steps-title{
+      font-weight:950;
+      font-size:15px;
+      margin:0;
+      letter-spacing:.2px;
+    }
+    .mini-status{
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.08);
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .step{
+      display:grid;
+      grid-template-columns:40px 1fr;
+      gap:12px;
+      padding:14px;
+      border-radius:18px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.08);
+      box-shadow:var(--shadow-soft);
+      transition:transform .22s ease, border-color .22s ease, background .22s ease;
+    }
+    .step:hover{
+      transform:translateX(3px);
+      border-color:rgba(255,106,106,.24);
+      background:rgba(255,255,255,.042);
+    }
+    .num{
+      width:40px;
+      height:40px;
+      border-radius:14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:950;
+      background:linear-gradient(135deg, rgba(255,70,70,.18), rgba(120,0,0,.24));
+      border:1px solid rgba(255,106,106,.18);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+      color:#fff;
+    }
+    .step b{display:block; font-size:14px; margin-bottom:4px}
+    .step span{display:block; font-size:13px; color:var(--muted); line-height:1.55}
+    .tip{
+      border-radius:18px;
+      padding:14px;
+      border:1px solid rgba(255,255,255,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.65;
+    }
 
-    .products-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
-    .product-card{position:relative;padding:24px;border-radius:28px;background:linear-gradient(180deg, rgba(18,18,24,.92), rgba(10,10,14,.9));border:1px solid rgba(255,75,75,.16);box-shadow:var(--shadow);overflow:hidden}
-    .product-card:hover{transform:translateY(-4px);box-shadow:0 30px 100px rgba(0,0,0,.55),0 0 34px rgba(255,45,85,.18)}
-    .card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
-    .card-head h3{margin:8px 0 6px;font-size:1.45rem}
-    .card-head p{margin:0;color:var(--muted);line-height:1.8}
-    .orb{width:74px;height:74px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.36), rgba(255,45,85,.24), transparent 70%);border:1px solid rgba(255,75,75,.22);box-shadow:0 0 40px rgba(255,45,85,.2)}
-    .variant-selector-wrap{display:grid;gap:8px;margin-bottom:16px}
-    .selector-label{font-size:.85rem;color:var(--muted-2)}
-    .variant-selector{width:100%;background:#121318;color:var(--text);border:1px solid rgba(255,75,75,.18);border-radius:16px;padding:14px 16px;outline:none;box-shadow:0 0 0 1px rgba(255,45,85,.06)}
-    .variant-panel{display:none;gap:14px}
-    .variant-panel.active{display:grid;animation:fadeIn .28s ease}
-    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-    .variant-meta-row{display:flex;flex-wrap:wrap;gap:8px}
-    .pill{display:inline-flex;align-items:center;padding:9px 12px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,75,75,.16);color:#fbe6ea;font-size:.83rem;box-shadow:0 0 18px rgba(255,45,85,.08)}
-    .badge{background:rgba(255,45,85,.14);border-color:rgba(255,75,75,.28)}
-    .price-line{display:grid;gap:4px}
-    .price{font-size:2rem;font-weight:900;letter-spacing:-.03em;color:#fff;text-shadow:0 0 24px rgba(255,45,85,.2)}
-    .subprice{color:var(--muted-2);font-size:.92rem}
-    .feature-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-    .feature-chip{display:flex;gap:10px;align-items:flex-start;padding:14px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.12)}
-    .feature-chip span:last-child{color:var(--muted);line-height:1.6}
-    .buyrow{display:flex;gap:12px;align-items:center;margin-top:4px;flex-wrap:wrap}
-    .qtybox{display:flex;align-items:center;gap:10px;padding:8px;border-radius:16px;background:rgba(255,255,255,.035);border:1px solid rgba(255,75,75,.16)}
-    .qtybtn{width:38px;height:38px;font-size:1.2rem}
-    .qtyval{min-width:24px;text-align:center;font-weight:800}
-    .btn-buy{padding:14px 20px;background:linear-gradient(135deg,#a8002a,var(--red-2));color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.06), 0 0 26px rgba(255,45,85,.22)}
-    .btn[disabled]{opacity:.46;cursor:not-allowed;transform:none;box-shadow:none}
-    .micro-note{font-size:.88rem;color:var(--muted-2)}
+    .section-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:end;
+      gap:14px;
+      margin:26px 0 14px;
+    }
+    .section{
+      font-size:18px;
+      font-weight:950;
+      letter-spacing:.2px;
+      color:#fff;
+    }
+    .section-sub{
+      font-size:13px;
+      color:var(--muted);
+      max-width:56ch;
+      text-align:right;
+    }
+    .grid{
+      display:grid;
+      gap:16px;
+      grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));
+      align-items:stretch;
+    }
+    .p{
+      padding:20px;
+      display:flex;
+      flex-direction:column;
+      min-height:100%;
+      transition:transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+    }
+    .p:hover{
+      transform:translateY(-6px);
+      border-color:rgba(255,90,90,.22);
+      box-shadow:0 28px 60px rgba(0,0,0,.56);
+    }
+    .card-top{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+    }
+    .ptitle{
+      font-weight:950;
+      font-size:24px;
+      line-height:1.18;
+      margin:0 0 8px;
+      letter-spacing:-.03em;
+    }
+    .psub{
+      font-size:13px;
+      color:var(--muted);
+    }
+    .hot{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size:11px;
+      font-weight:950;
+      color:#fff;
+      background:linear-gradient(135deg, rgba(255,60,60,.96), rgba(120,0,0,.88));
+      padding:8px 12px;
+      border-radius:999px;
+      box-shadow:0 12px 28px rgba(197,0,23,.24);
+      animation:floatY 3s ease-in-out infinite;
+      white-space:nowrap;
+    }
+    .price{
+      font-size:36px;
+      font-weight:950;
+      margin:18px 0 14px;
+      letter-spacing:-.04em;
+      line-height:1;
+    }
+    .price small{
+      font-size:14px;
+      color:var(--muted);
+      font-weight:700;
+      letter-spacing:0;
+      margin-left:6px;
+    }
+    .feats{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:10px;
+      margin-bottom:16px;
+      flex:1;
+    }
+    .feat{
+      display:flex;
+      align-items:flex-start;
+      gap:10px;
+      font-size:13px;
+      color:rgba(255,255,255,.9);
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(255,255,255,.08);
+      padding:12px;
+      border-radius:16px;
+      line-height:1.5;
+      box-shadow:var(--shadow-soft);
+      transition:transform .2s ease, border-color .2s ease;
+    }
+    .feat:hover{
+      transform:translateY(-2px);
+      border-color:rgba(255,106,106,.22);
+    }
+    .feat i{
+      width:20px;
+      height:20px;
+      border-radius:999px;
+      background:linear-gradient(135deg, var(--red-1), var(--red-2));
+      box-shadow:0 0 18px rgba(255,43,43,.22);
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      font-style:normal;
+      font-size:11px;
+      flex:0 0 auto;
+      margin-top:1px;
+    }
+    .buyrow{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top:8px;
+    }
+    .qtybox{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:16px;
+      padding:10px 12px;
+      box-shadow:var(--shadow-soft);
+    }
+    .qtybtn{
+      width:40px;
+      height:40px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(255,255,255,.02);
+      color:var(--text);
+      font-weight:900;
+      font-size:16px;
+      transition:transform .2s ease, border-color .2s ease;
+    }
+    .qtybtn:hover:not(:disabled){
+      transform:translateY(-1px);
+      border-color:rgba(255,106,106,.24);
+    }
+    .qtybtn:disabled{opacity:.45; cursor:not-allowed}
+    .qtyval{min-width:28px; text-align:center; font-weight:900}
+    .note{
+      margin-top:12px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.6;
+      padding-top:12px;
+      border-top:1px solid rgba(255,255,255,.06);
+    }
 
-    .trust-grid,.faq-grid,.testi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-    .trust-card,.faq-item,.testi-card,.contact-card,.footer-stat{padding:18px;border-radius:22px;background:linear-gradient(180deg, rgba(17,17,22,.9), rgba(10,10,14,.88));border:1px solid rgba(255,75,75,.14);box-shadow:var(--shadow)}
-    .trust-card h3,.testi-card h3{margin:12px 0 8px;font-size:1rem}
-    .trust-card p,.testi-card p,.contact-card p{margin:0;color:var(--muted);line-height:1.8}
-    .faq-grid{grid-template-columns:1fr}
-    .faq-item summary{cursor:pointer;font-weight:800;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .faq-item summary::-webkit-details-marker{display:none}
-    .faq-item summary::after{content:'+';font-size:1.2rem;color:#fff}
-    .faq-item[open] summary::after{content:'âˆ’'}
-    .faq-answer{margin-top:14px;color:var(--muted);line-height:1.8}
-    .testi-card h3{display:flex;justify-content:space-between;gap:10px}
+    .footer{
+      margin-top:22px;
+      color:rgba(255,255,255,.52);
+      font-size:12px;
+      display:flex;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:10px;
+      border-top:1px solid rgba(255,255,255,.08);
+      padding-top:16px;
+    }
 
-    .contact-grid{display:grid;grid-template-columns:1.08fr .92fr;gap:18px}
-    .contact-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}
+    .wa{
+      position:fixed;
+      right:18px;
+      bottom:18px;
+      z-index:999;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:14px 18px;
+      border-radius:999px;
+      background:linear-gradient(135deg, var(--red-1), var(--red-2));
+      color:#fff;
+      text-decoration:none;
+      font-weight:950;
+      box-shadow:0 18px 34px rgba(197,0,23,.28);
+      border:1px solid rgba(255,255,255,.10);
+      transition:transform .2s ease, box-shadow .2s ease;
+    }
+    .wa:hover{
+      transform:translateY(-3px);
+      box-shadow:0 24px 40px rgba(197,0,23,.36);
+    }
 
-    .footer{padding:24px 0 70px}
-    .footer-box{display:grid;gap:16px;padding:22px;border-radius:28px;background:linear-gradient(180deg, rgba(14,14,18,.95), rgba(7,7,10,.92));border:1px solid rgba(255,75,75,.14);box-shadow:var(--shadow)}
-    .footer-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-    .footer p{margin:0;color:var(--muted)}
+    .reveal{
+      opacity:0;
+      transform:translateY(18px);
+      transition:opacity .6s ease, transform .6s ease;
+    }
+    .reveal.show{
+      opacity:1;
+      transform:translateY(0);
+    }
 
-    .floating-cta{position:fixed;right:18px;bottom:18px;z-index:70;display:inline-flex;align-items:center;gap:10px;padding:14px 18px;border-radius:999px;background:linear-gradient(135deg,var(--red-3),var(--red-2));color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.08),0 0 26px rgba(255,45,85,.24)}
-
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.62);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:.25s ease;z-index:150}
-    .modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-45%) scale(.98);width:min(94vw,420px);background:#111217;border:1px solid rgba(255,75,75,.18);border-radius:26px;padding:22px;z-index:160;opacity:0;pointer-events:none;transition:.25s ease;box-shadow:0 20px 80px rgba(0,0,0,.56),0 0 28px rgba(255,45,85,.16)}
-    .modal h3{margin:0 0 10px}
-    .modal p{margin:0;color:var(--muted);line-height:1.8}
-    .modal .stack{display:grid;gap:12px;margin-top:18px}
-    .modal.open,.modal-backdrop.open{opacity:1;pointer-events:auto}
-    .modal.open{transform:translate(-50%,-50%) scale(1)}
-
-    .skeleton-overlay{position:fixed;inset:0;background:rgba(5,5,8,.95);backdrop-filter:blur(4px);z-index:200;display:none;place-items:center;padding:20px}
-    .skeleton-box{width:min(96vw,980px);display:grid;gap:16px}
-    .skeleton-card{height:88px;border-radius:24px;background:linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.14) 50%, rgba(255,255,255,.06) 75%);background-size:240% 100%;animation:shimmer 1.4s infinite}
-    .skeleton-card.big{height:280px}
-    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-
-    .reveal{opacity:0;transform:translateY(22px);transition:opacity .65s ease, transform .65s ease}
-    .reveal.show{opacity:1;transform:none}
+    @keyframes floatY{
+      0%,100%{transform:translateY(0)}
+      50%{transform:translateY(-3px)}
+    }
+    @keyframes pulseGlow{
+      0%,100%{box-shadow:0 0 0 1px rgba(255,255,255,.10), 0 0 26px rgba(255,43,43,.22)}
+      50%{box-shadow:0 0 0 1px rgba(255,255,255,.12), 0 0 34px rgba(255,43,43,.32)}
+    }
 
     @media (max-width: 1080px){
-      .hero-grid,.products-grid,.contact-grid,.trust-grid,.testi-grid{grid-template-columns:1fr}
-      .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-      .feature-grid{grid-template-columns:1fr}
+      .hero{
+        grid-template-columns:1fr;
+      }
+      .heroL{min-height:unset}
     }
-    @media (min-width: 900px){ .nav-chip{display:inline-flex} .container{padding:0 26px} }
-    @media (max-width: 720px){
-      .container{padding:0 16px}
-      .hero-card,.hero-side,.product-card,.trust-card,.faq-item,.testi-card,.contact-card,.footer-box{border-radius:22px}
-      .hero-card{padding:24px}
-      .header-inner{padding:12px 0}
-      .stats-grid,.footer-stats{grid-template-columns:1fr 1fr}
-      .floating-cta{right:12px;left:12px;justify-content:center}
-      .brand-text span{display:none}
+    @media (max-width: 760px){
+      :root{ --header-h:74px; }
+      .header-inner,.wrap{
+        width:min(var(--container), calc(100vw - 20px));
+      }
+      .header-inner{
+        padding:10px 0;
+      }
+      .logo-shell{
+        width:48px; height:48px;
+      }
+      .tag{
+        font-size:12px;
+      }
+      .nav-pill{
+        display:none;
+      }
+      .heroL,.heroR,.p{
+        padding:18px;
+      }
+      .hero-metrics{
+        grid-template-columns:repeat(2, minmax(0,1fr));
+      }
+      .feats{
+        grid-template-columns:1fr;
+      }
+      .price{
+        font-size:32px;
+      }
+      .section-head{
+        flex-direction:column;
+        align-items:flex-start;
+      }
+      .section-sub{
+        text-align:left;
+      }
+    }
+    @media (max-width: 520px){
+      .wrap{
+        padding:18px 0 92px;
+      }
+      .title{
+        max-width:100%;
+      }
+      .actions,
+      .buyrow{
+        flex-direction:column;
+        align-items:stretch;
+      }
+      .btn,
+      .qtybox{
+        width:100%;
+      }
+      .grid{
+        grid-template-columns:1fr;
+      }
+      .hero-metrics{
+        grid-template-columns:1fr 1fr;
+      }
+      .price{
+        font-size:30px;
+      }
+      .wa{
+        right:14px;
+        bottom:14px;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="drawer" id="drawer">
-    <div class="drawer-top">
+  <header class="site-header">
+    <div class="header-inner">
       <div class="brand">
-        <img src="$logo_url" alt="Logo Impura" class="logo"/>
-        <div class="brand-text"><strong>Impura</strong><span>Cyber Premium Access</span></div>
-      </div>
-      <button class="icon-btn" id="closeDrawer" style="width:42px;height:42px">âœ•</button>
-    </div>
-    <nav class="drawer-nav">
-      <a href="#beranda">Beranda <span>â†—</span></a>
-      <a href="/cek-order">Cek Order <span>â†—</span></a>
-      <a href="#hubungi-kami">Hubungi Kami <span>â†—</span></a>
-      <a href="#faq">FAQ <span>â†—</span></a>
-    </nav>
-  </aside>
-
-  <header class="sticky-header">
-    <div class="container header-inner">
-      <div class="brand">
-        <button class="menu-btn" id="openDrawer" aria-label="Buka menu">â˜°</button>
-        <img src="$logo_url" alt="Logo Impura" class="logo"/>
-        <div class="brand-text"><strong>Impura</strong><span>â€¢ QRIS Verified</span></div>
-      </div>
-      <div class="header-actions">
-        <button class="btn btn-primary glitch-btn" data-label="Chat Admin" id="chatAdminBtn" type="button">Chat Admin</button>
+        <div class="logo-shell">
+          <img class="logo" src="$logo" alt="Logo Impura"/>
+        </div>
+        <div class="brand-copy">
+          <h1>Impura</h1>
+          <div class="tag">Menyediakan Berbagai Layanan AI Premium</div>
+        </div>
       </div>
     </div>
   </header>
 
-  <main>
-    <section class="hero" id="beranda">
-      <div class="container hero-grid">
-        <div class="hero-card reveal show">
-          <span class="eyebrow">Beli Akses AI Premium dengan proses cepat.</span>
-          <div class="title"><span class="accent">Beli Akses AI Premium dengan proses cepat</span>.</div>
-          <div class="typing-wrap"><span>âš¡</span><span id="typingText"></span><span class="typing-cursor"></span></div>
-          <p class="lead">Pilih produk  bayar QRIS  tunggu verifikasi  sistem otomatis kirim akun email.</p>
-          <div class="hero-actions">
-            <a href="#produk" class="btn btn-primary glitch-btn" data-label="Lihat Produk">Lihat Produk</a>
-            <a href="/cek-order" class="btn btn-secondary">Cek Status Order</a>
-          </div>
-          <div class="stats-grid">
-            <div class="stat"><strong id="heroSold">$hero_sold</strong><span>Total produk terjual</span></div>
-            <div class="stat"><strong id="heroActive">$hero_active</strong><span>Pengguna aktif</span></div>
-          </div>
+  <div class="wrap">
+    <div class="hero">
+      <div class="card heroL reveal">
+        <div class="eyebrow"><span class="dot"></span> Harga termurah se Indonesia</div>
+        <div class="title"><span class="accent">Beli Akses AI Premium dengan proses cepat</span>.</div>
+        <div class="sub">
+          Pilih produk → bayar QRIS → tunggu verifikasi → sistem otomatis kirim akun email.
         </div>
-        <div class="hero-side reveal">
-          <div class="mini-card">
-            <h3>Kenapa pilih Impura?</h3>
-            <div class="mini-list">
-              <div><span class="devil">ðŸ˜ˆ</span><span>Semua produk bergaransi.</span></div>
-              <div><span class="devil">ðŸ˜ˆ</span><span>Support after sales, ketika produk bermasalah bisa chatt admin.</span></div>
-              <div><span class="devil">ðŸ˜ˆ</span><span>Harga murah namun berkualitas</span></div>
-            </div>
-          </div>
-          <div class="mini-card">
-            <h3>Support & delivery</h3>
-            <div class="mini-list">
-              <div><span class="devil">ðŸ˜ˆ</span><span>Pilih WhatsApp atau Telegram langsung dari tombol chat admin.</span></div>
-              <div><span class="devil">ðŸ˜ˆ</span><span>Cek status order mandiri menggunakan Order ID kapan pun.</span></div>
-              <div><span class="devil">ðŸ˜ˆ</span><span>QRIS bisa diperbesar untuk membantu scan via galeri.</span></div>
-            </div>
-          </div>
+        <div class="actions">
+          <a class="btn primary" href="#produk">Lihat Produk</a>
+          <a class="btn ghost" href="#cara">Cara Beli</a>
+        </div>
+        <div class="hero-metrics">
+          <div class="metric"><b>QRIS</b><span>Pembayaran cepat dan jelas tanpa langkah rumit.</span></div>
+          <div class="metric"><b>Otomatis</b><span>Status order dan alur pembelian terasa lebih rapi.</span></div>
+          <div class="metric"><b>Private</b><span>Semua benefit untuk sendiri tidak berbagi atau rame-rame.</span></div>
+          <div class="metric"><b>Support</b><span>Admin tetap mudah dihubungi lewat tombol chat.</span></div>
         </div>
       </div>
-    </section>
 
-    <section class="section" id="produk">
-      <div class="container">
-        <div class="section-head reveal">
-          <div>
-            <h2>Produk</h2>
-          </div>
+      <div class="card heroR reveal" id="cara">
+        <div class="steps-head">
+          <div class="steps-title">Cara beli (3 langkah)</div>
         </div>
-        <div class="products-grid">
-          $cards
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="keunggulan">
-      <div class="container">
-        <div class="section-head reveal">
-          <div>
-            <h2>Trust layer yang lebih kuat</h2>
-            <p>Section ini membantu menaikkan kepercayaan user dengan menampilkan value proposition yang jelas, terpisah, dan mudah dibaca.</p>
-          </div>
-        </div>
-        <div class="trust-grid">
-          <div class="trust-card reveal"><span class="devil">ðŸ˜ˆ</span><h3>Pembayaran Aman</h3><p>Instruksi QRIS diperjelas agar user membayar sesuai nominal unik yang muncul.</p></div>
-          <div class="trust-card reveal"><span class="devil">ðŸ˜ˆ</span><h3>Verifikasi Cepat</h3><p>Status order bisa dicek manual lewat halaman khusus tanpa harus chat admin dulu.</p></div>
-          <div class="trust-card reveal"><span class="devil">ðŸ˜ˆ</span><h3>Responsif Mobile</h3><p>Desktop lebih full, mobile tetap rapih, sticky header selalu terlihat, dan feedback salin lebih terasa.</p></div>
-          <div class="trust-card reveal"><span class="devil">ðŸ˜ˆ</span><h3>Cyber Premium UI</h3><p>Scanline, border glow, hover glitch, dan animasi modern membentuk identitas visual yang lebih kuat.</p></div>
-        </div>
-      </div>
-    </section>
-
-    
-
-    <section class="section" id="faq">
-      <div class="container">
-        <div class="section-head reveal">
-          <div>
-            <h2>FAQ</h2>
-            <p>Draft FAQ sudah disiapkan agar user bisa mendapat jawaban cepat tanpa harus bertanya ke admin untuk hal-hal dasar.</p>
-          </div>
-        </div>
-        <div class="faq-grid">
-          $faq_items
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="hubungi-kami">
-      <div class="container contact-grid">
-        <div class="contact-card reveal">
-          <div class="section-head" style="margin-bottom:10px"><div><h2>Butuh bantuan cepat?</h2><p>Klik tombol chat admin di pojok kanan atas.</p></div></div>
-        </div>
-        <div class="contact-card reveal">
-          <div class="section-head" style="margin-bottom:10px"><div><h2>Catatan penting pembayaran</h2></div></div>
-          <p><strong style="color:#fff">Jangan membulatkan nominal transfer.</strong> Sistem membaca nominal unik sampai digit terakhir untuk mempercepat pencocokan pembayaran. Transfer harus persis sesuai angka yang tampil pada halaman bayar.</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-box reveal show">
-        <p>Â© $year Impura. All rights reserved.</p>
+        <div class="step"><div class="num">1</div><div><b>Pilih produk</b><span>Klik tombol beli pada produk yang kamu inginkan, lalu atur jumlah pembelian dengan cepat.</span></div></div>
+        <div class="step"><div class="num">2</div><div><b>Bayar QRIS</b><span>Transfer sesuai nominal. Tampilan baru dibuat lebih kontras supaya fokus user tetap ke aksi utama.</span></div></div>
+        <div class="step"><div class="num">3</div><div><b>Verifikasi</b><span>Setelah pembayaran masuk, sistem akan meneruskan user ke halaman akun email secara otomatis.</span></div></div>
       </div>
     </div>
-  </footer>
 
-  <a href="#produk" class="floating-cta">ðŸ”¥ Beli Sekarang</a>
+    <div class="section-head reveal">
+      <div class="section" id="produk">Produk tersedia</div>
+    </div>
+    <div class="grid">
+      $cards
+    </div>
 
-  <div class="modal-backdrop" id="modalBackdrop"></div>
-  <div class="modal" id="chatModal">
-    <h3>Hubungi Admin</h3>
-    <p>Pilih channel yang ingin kamu gunakan untuk menghubungi admin Impura.</p>
-    <div class="stack">
-      <a class="btn btn-primary" href="$wa_url" target="_blank" rel="noopener">WhatsApp</a>
-      <a class="btn btn-secondary" href="$telegram_url" target="_blank" rel="noopener">Telegram</a>
-      <button class="btn btn-secondary" id="closeModalBtn" type="button">Tutup</button>
+    <div class="footer">
+      <div>© $year impura</div>
     </div>
   </div>
 
-  <div class="skeleton-overlay" id="skeletonOverlay">
-    <div class="skeleton-box">
-      <div class="skeleton-card"></div>
-      <div class="skeleton-card big"></div>
-      <div class="skeleton-card"></div>
-    </div>
-  </div>
+  <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">
+    💬 Chat Admin
+  </a>
 
   <script>
-    const PRODUCT_META = $product_json;
-    const qtyMap = {};
-    const typingTarget = document.getElementById('typingText');
-    const typingMessage = 'Menyediakan Berbagai Layanan AI Premium';
-    let typingIndex = 0;
-    function runTyping(){
-      if(!typingTarget) return;
-      if(typingIndex <= typingMessage.length){
-        typingTarget.textContent = typingMessage.slice(0, typingIndex);
-        typingIndex += 1;
-        setTimeout(runTyping, typingIndex < typingMessage.length ? 55 : 1200);
-      } else {
-        typingIndex = 0;
-        setTimeout(runTyping, 600);
-      }
-    }
-    runTyping();
-
-    function animateCounter(el, end){
-      if(!el) return;
-      const finalVal = Number(end || 0);
-      const start = performance.now();
-      const duration = 900;
-      const from = Number(String(el.textContent).replace(/\D/g,'')) || 0;
-      function frame(now){
-        const p = Math.min(1, (now - start) / duration);
-        const value = Math.round(from + (finalVal - from) * (1 - Math.pow(1-p, 3)));
-        el.textContent = value.toLocaleString('id-ID');
-        if(p < 1) requestAnimationFrame(frame);
-      }
-      requestAnimationFrame(frame);
-    }
-
-    function setVariant(groupId, pid){
-      document.querySelectorAll(`[data-group-stack="${groupId}"] .variant-panel`).forEach(el => el.classList.remove('active'));
-      const panel = document.querySelector(`[data-variant-panel="${pid}"]`);
-      if(panel) panel.classList.add('active');
-      if(!qtyMap[pid]) qtyMap[pid] = 1;
-    }
-
-    document.querySelectorAll('[data-group-selector]').forEach(select => {
-      const groupId = select.getAttribute('data-group-selector');
-      setVariant(groupId, select.value);
-      select.addEventListener('change', () => setVariant(groupId, select.value));
-    });
-    document.querySelectorAll('.product-card').forEach(card => {
-      const groupId = card.dataset.group;
-      if(!card.querySelector('[data-group-selector]')){
-        const panel = card.querySelector('.variant-panel');
-        if(panel) panel.classList.add('active');
-      }
-    });
-
-    document.querySelectorAll('[data-act]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const pid = btn.dataset.pid;
-        const act = btn.dataset.act;
-        const meta = PRODUCT_META[pid] || {};
-        const stock = Number(meta.stock || 0);
-        let val = qtyMap[pid] || 1;
-        if(act === 'minus') val = Math.max(1, val - 1);
-        if(act === 'plus') val = Math.min(Math.max(stock, 1), val + 1);
-        qtyMap[pid] = val;
-        const target = document.querySelector(`[data-qty="${pid}"]`);
-        if(target) target.textContent = String(val);
-      });
-    });
-
-    function openDrawer(){ drawer.classList.add('open'); drawerBackdrop.classList.add('open'); document.body.style.overflow='hidden'; }
-    function closeDrawer(){ drawer.classList.remove('open'); drawerBackdrop.classList.remove('open'); document.body.style.overflow=''; }
-    const drawer = document.getElementById('drawer');
-    const drawerBackdrop = document.getElementById('drawerBackdrop');
-    document.getElementById('openDrawer').addEventListener('click', openDrawer);
-    document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
-    drawerBackdrop.addEventListener('click', closeDrawer);
-    document.querySelectorAll('.drawer-nav a').forEach(a => a.addEventListener('click', closeDrawer));
-
-    const modal = document.getElementById('chatModal');
-    const modalBackdrop = document.getElementById('modalBackdrop');
-    function openModal(){ modal.classList.add('open'); modalBackdrop.classList.add('open'); }
-    function closeModal(){ modal.classList.remove('open'); modalBackdrop.classList.remove('open'); }
-    document.getElementById('chatAdminBtn').addEventListener('click', openModal);
-    document.getElementById('chatAdminBtn2').addEventListener('click', openModal);
-    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
-    modalBackdrop.addEventListener('click', closeModal);
-
-    const skeleton = document.getElementById('skeletonOverlay');
-    document.querySelectorAll('[data-buy]').forEach(btn => {
-      btn.dataset.label = btn.textContent.trim();
-      btn.addEventListener('click', () => {
-        const pid = btn.dataset.buy;
-        const qty = qtyMap[pid] || 1;
-        skeleton.style.display = 'grid';
-        setTimeout(() => {
-          location.href = `/checkout/${pid}?qty=${qty}`;
-        }, 650);
-      });
-    });
-
-    const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => { if(entry.isIntersecting) entry.target.classList.add('show'); });
-    }, { threshold: .15 });
-    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
-
-    async function refreshStats(){
+    async function loadStock(){
       try{
-        const [statsRes, visRes, stockRes] = await Promise.all([
-          fetch('/api/stats'),
-          fetch('/api/visitors'),
-          fetch('/api/stock')
-        ]);
-        const stats = await statsRes.json();
-        const vis = await visRes.json();
-        const stockData = await stockRes.json();
-        if(stats.ok){
-          animateCounter(document.getElementById('heroSold'), stats.total_success);
-          animateCounter(document.getElementById('heroActive'), stats.active_users);
-          animateCounter(document.getElementById('heroToday'), stats.today_success);
-          animateCounter(document.getElementById('footerActive'), stats.active_users);
-          animateCounter(document.getElementById('footerToday'), stats.today_success);
-          Object.entries(stats.sold || {}).forEach(([pid, val]) => {
-            const panel = document.querySelector(`[data-variant-panel="${pid}"] .pill:nth-child(2)`);
-            if(panel) panel.textContent = `Terjual ${Number(val || 0).toLocaleString('id-ID')}`;
-          });
+        const r = await fetch("/api/stock", {cache:"no-store"});
+        const j = await r.json();
+        if(!j || !j.ok) return;
+        for(const pid in j.stock){
+          const el = document.getElementById("stock-"+pid);
+          if(!el) continue;
+          el.textContent = "Stok: " + j.stock[pid] + " tersedia";
         }
-        if(vis.ok){ animateCounter(document.getElementById('heroVisitors'), vis.count); }
-        if(stockData.ok){
-          Object.entries(stockData.stock || {}).forEach(([pid, val]) => {
-            const el = document.getElementById(`stock-${pid}`);
-            if(el) el.textContent = `Stok ${Number(val || 0).toLocaleString('id-ID')}`;
-          });
-        }
-      }catch(e){ console.log(e); }
+      }catch(e){}
     }
-    refreshStats();
-    setInterval(refreshStats, 18000);
+    loadStock();
+    setInterval(loadStock, 8000);
+
+    (function(){
+      const io = new IntersectionObserver((entries)=>{
+        entries.forEach((entry)=>{
+          if(entry.isIntersecting){
+            entry.target.classList.add("show");
+          }
+        });
+      }, {threshold:.14});
+      document.querySelectorAll(".reveal, .p").forEach((el)=> io.observe(el));
+    })();
+  </script>
+
+  <script>
+  (function(){
+    function syncCard(card){
+      const stock = parseInt(card.getAttribute("data-stock") || "0", 10) || 0;
+      const qtyEl = card.querySelector(".qtyval");
+      const minus = card.querySelector(".qty-minus");
+      const plus  = card.querySelector(".qty-plus");
+      const buy   = card.querySelector(".buybtn");
+      let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+
+      if(stock <= 0){
+        qty = 1;
+        if(qtyEl) qtyEl.textContent = "1";
+        if(minus) minus.disabled = true;
+        if(plus)  plus.disabled = true;
+        if(buy){ buy.disabled = true; buy.setAttribute("aria-disabled","true"); }
+        return;
+      }
+
+      qty = Math.max(1, Math.min(qty, stock));
+      if(qtyEl) qtyEl.textContent = String(qty);
+      if(minus) minus.disabled = qty <= 1;
+      if(plus)  plus.disabled  = qty >= stock;
+      if(buy){ buy.disabled = false; buy.removeAttribute("aria-disabled"); }
+    }
+
+    function bind(){
+      document.querySelectorAll(".p[data-product]").forEach(card=>{
+        syncCard(card);
+        const minus = card.querySelector(".qty-minus");
+        const plus  = card.querySelector(".qty-plus");
+        const buy   = card.querySelector(".buybtn");
+
+        if(minus){
+          minus.addEventListener("click", ()=>{
+            const qtyEl = card.querySelector(".qtyval");
+            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            qty -= 1;
+            if(qtyEl) qtyEl.textContent = String(qty);
+            syncCard(card);
+          });
+        }
+        if(plus){
+          plus.addEventListener("click", ()=>{
+            const qtyEl = card.querySelector(".qtyval");
+            let qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            qty += 1;
+            if(qtyEl) qtyEl.textContent = String(qty);
+            syncCard(card);
+          });
+        }
+        if(buy){
+          buy.addEventListener("click", ()=>{
+            if(buy.disabled) return;
+            const pid = buy.getAttribute("data-buy") || card.getAttribute("data-product");
+            const qtyEl = card.querySelector(".qtyval");
+            const qty = parseInt((qtyEl && qtyEl.textContent) || "1", 10) || 1;
+            window.location.href = "/checkout/" + encodeURIComponent(pid) + "?qty=" + encodeURIComponent(qty);
+          });
+        }
+      });
+    }
+
+    async function refreshStock(){
+      try{
+        const r = await fetch("/api/stock");
+        const j = await r.json();
+        if(!j || !j.stock) return;
+        for(const pid in j.stock){
+          const el = document.getElementById("stock-" + pid);
+          if(el) el.textContent = "Stok: " + j.stock[pid] + " tersedia";
+          const card = document.querySelector('.p[data-product="' + pid + '"]');
+          if(card){ card.setAttribute("data-stock", j.stock[pid]); syncCard(card); }
+        }
+      }catch(e){}
+    }
+
+    bind();
+    refreshStock();
+    setInterval(refreshStock, 15000);
+  })();
   </script>
 </body>
-</html>""")
+</html>
+""")
 
 PAY_HTML = Template(r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Bayar Order â€” Impura</title>
+  <title>Pembayaran QRIS</title>
   <style>
-    :root{color-scheme:dark;--bg:#050506;--panel:#111217;--line:rgba(255,75,75,.18);--text:#f7f8fc;--muted:#c6cad4;--red:#ff2d55;--red2:#ff4b4b;--shadow:0 20px 70px rgba(0,0,0,.56),0 0 30px rgba(255,45,85,.14)}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at top left, rgba(255,45,85,.14), transparent 30%),linear-gradient(180deg,#050506,#0a0a0d);color:var(--text);min-height:100vh}
-    body::before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0, rgba(255,255,255,.02) 1px, transparent 3px, transparent 7px);opacity:.28}
-    .container{max-width:1180px;margin:0 auto;padding:28px 20px 50px}
-    .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-    .brand{display:flex;align-items:center;gap:12px}.logo{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,75,75,.4);box-shadow:0 0 26px rgba(255,45,85,.22)}
-    .grid{display:grid;grid-template-columns:1fr .96fr;gap:18px}.card{background:linear-gradient(180deg, rgba(17,18,23,.94), rgba(10,10,14,.9));border:1px solid var(--line);border-radius:28px;padding:24px;box-shadow:var(--shadow)}
-    .eyebrow{display:inline-flex;padding:8px 14px;border-radius:999px;background:rgba(255,45,85,.12);border:1px solid rgba(255,75,75,.26);font-size:.76rem;letter-spacing:.18em;text-transform:uppercase}
-    h1{margin:16px 0 8px;font-size:clamp(1.8rem,3.2vw,3rem)} p{color:var(--muted);line-height:1.8;margin:0}
-    .order-grid{display:grid;gap:12px;margin-top:20px}.row{display:flex;justify-content:space-between;gap:16px;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.12)}
-    .label{color:#9ea5b7}.value{font-weight:800}.value.red{color:#fff;text-shadow:0 0 18px rgba(255,45,85,.24)}
-    .warn{margin-top:16px;padding:16px 18px;border-radius:20px;background:rgba(255,45,85,.08);border:1px solid rgba(255,75,75,.18)}
-    .warn strong{display:block;margin-bottom:6px;color:#fff}
-    .copyline{display:flex;align-items:center;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-    .copy-btn,.btn,.zoom-fab{border:none;cursor:pointer;border-radius:14px;padding:12px 16px;font-weight:800;transition:.25s ease}
-    .copy-btn{padding:8px 12px;background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,75,75,.18)}
-    .btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
-    .btn-primary{background:linear-gradient(135deg,#a8002a,var(--red2));color:#fff;box-shadow:0 0 26px rgba(255,45,85,.22)}
-    .btn-secondary{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)}
-    .qris-wrap{display:grid;gap:14px}.qris-frame{position:relative;padding:16px;border-radius:28px;background:#fff;border:2px solid rgba(255,75,75,.18);overflow:hidden}
-    .qris-frame img{width:100%;border-radius:18px;cursor:zoom-in}.zoom-fab{position:absolute;right:16px;bottom:16px;background:rgba(17,18,23,.94);color:#fff;border:1px solid rgba(255,75,75,.18);padding:10px 14px}
-    .tips{display:grid;gap:12px}.tip{display:flex;gap:10px;align-items:flex-start;padding:14px 16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.12)}
-    .tip .icon{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#ff6684,var(--red));box-shadow:0 0 16px rgba(255,45,85,.24)}
-    .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:18px}.timer{font-size:1.1rem;font-weight:800;color:#fff;text-shadow:0 0 18px rgba(255,45,85,.24)}
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:.25s ease}.modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-46%) scale(.98);width:min(96vw,580px);background:#0e0f14;border:1px solid var(--line);border-radius:30px;padding:18px;opacity:0;pointer-events:none;transition:.25s ease;box-shadow:var(--shadow)}
-    .modal img{width:100%;border-radius:20px}.modal.open,.modal-backdrop.open{opacity:1;pointer-events:auto}.modal.open{transform:translate(-50%,-50%) scale(1)}
-    @media (max-width:960px){.grid{grid-template-columns:1fr}}
+    :root{
+      --bg:#070c18; --glass:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.92); --muted:rgba(255,255,255,.70);
+      --g1:#ff3b3b; --g2:#a40019; --shadow:0 18px 42px rgba(0,0,0,.45); --r:22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+      color:var(--text);
+      background:
+        radial-gradient(900px 520px at 20% -10%, rgba(255,43,43,.18), transparent 60%),
+        radial-gradient(900px 520px at 80% 0%, rgba(164,0,25,.16), transparent 55%),
+        var(--bg);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:26px 14px;
+    }
+    .box{
+      width:min(520px, 100%);
+      background:var(--glass);
+      border:1px solid var(--line);
+      border-radius:var(--r);
+      box-shadow:var(--shadow);
+      padding:22px;
+      text-align:center;
+      backdrop-filter: blur(12px);
+      position:relative; overflow:hidden;
+    }
+    .box:before{
+      content:""; position:absolute; inset:-2px;
+      background: radial-gradient(700px 260px at 30% 10%, rgba(56,189,248,.16), transparent 60%);
+      pointer-events:none;
+    }
+    h1{margin:0 0 8px; font-size:28px}
+    .muted{color:var(--muted); font-size:13px}
+    .total{font-size:42px; font-weight:950; color:var(--g1); margin:10px 0 6px; letter-spacing:.4px}
+    .qris{
+      margin:16px auto 6px;
+      width:min(360px, 100%);
+      background:#fff;
+      border-radius:18px;
+      padding:12px;
+      box-shadow: 0 14px 30px rgba(0,0,0,.35);
+    }
+    .qris img{width:100%; height:auto; border-radius:12px; display:block}
+    .oid{
+      margin-top:14px;
+      padding:12px;
+      border:1px dashed rgba(255,255,255,.20);
+      border-radius:16px;
+      font-size:12px;
+      color:rgba(255,255,255,.80);
+      word-break:break-all;
+    }
+    .btn{
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      margin-top:14px;
+      padding:12px 16px;
+      border-radius:14px;
+      text-decoration:none;
+      background:rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--text);
+      font-weight:950;
+      transition: transform .18s ease, filter .18s ease;
+    }
+    .btn:hover{transform: translateY(-2px); filter:brightness(1.05)}
+    .row{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
+    .wa{
+      position:fixed; right:18px; bottom:18px; z-index:999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 16px;border-radius:999px;
+      background:linear-gradient(135deg, rgba(255,43,43,.95), rgba(164,0,25,.85));
+      color:#fff;text-decoration:none;font-weight:950;
+      box-shadow:0 14px 28px rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    .toast{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:18px; z-index:1000;
+      background:rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.12);
+      color:#fff;
+      padding:12px 14px;
+      border-radius:14px;
+      opacity:0; pointer-events:none;
+      transition: opacity .2s ease, transform .2s ease;
+      backdrop-filter: blur(10px);
+    }
+    .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="topbar">
-      <div class="brand"><img src="$logo_url" alt="Logo" class="logo"/><div><strong>Impura</strong><div style="color:#9ea5b7">Pembayaran QRIS</div></div></div>
-      <a class="btn btn-secondary" href="/">â† Kembali</a>
-    </div>
-    <div class="grid">
-      <section class="card">
-        <span class="eyebrow">Nominal unik wajib persis</span>
-        <h1>Bayar sekarang</h1>
-        <p>Jangan membulatkan nominal transfer. Sistem membaca hingga digit terakhir agar pembayaran cepat terdeteksi. Gunakan nominal <strong style="color:#fff">sama persis</strong>.</p>
-        <div class="order-grid">
-          <div class="row"><span class="label">Produk</span><span class="value">$product_name</span></div>
-          <div class="row"><span class="label">Jumlah</span><span class="value">$qty</span></div>
-          <div class="row"><span class="label">Subtotal</span><span class="value">Rp $subtotal</span></div>
-          <div class="row"><span class="label">Order ID</span><span class="copyline"><span class="value" id="orderIdVal">$order_id</span><button class="copy-btn" data-copy="$order_id">Copy</button></span></div>
-          <div class="row"><span class="label">Nominal transfer</span><span class="copyline"><span class="value red" id="amountVal">Rp $total</span><button class="copy-btn" data-copy="$total_clean">Copy</button></span></div>
-        </div>
-        <div class="warn"><strong>Penting:</strong> nominal QRIS harus sama persis, jangan dibulatkan, jangan dikurangi, dan jangan menambah angka lain. Bila transfer tidak sesuai, verifikasi dapat terhambat.</div>
-        <div class="actions">
-          <a class="btn btn-primary" href="/status/$order_id">Cek Status Order</a>
-        </div>
-      </section>
-      <section class="card qris-wrap">
-        <div class="qris-frame">
-          <img src="$qris" id="qrisImage" alt="QRIS Impura"/>
-          <button class="zoom-fab" id="zoomBtn" type="button">Perbesar QR</button>
-        </div>
-        <div class="tips">
-          <div class="tip"><span class="icon">ðŸ˜ˆ</span><div><strong>Simpan QR jika perlu</strong><div style="color:#c6cad4">Tekan lama pada gambar QR untuk menyimpan ke galeri, atau klik tombol <em>Perbesar QR</em> agar lebih mudah dipindai.</div></div></div>
-          <div class="tip"><span class="icon">ðŸ˜ˆ</span><div><strong>Scan QRIS</strong><div style="color:#c6cad4">Buka aplikasi pembayaran, scan QRIS, lalu pastikan memasukan nominal yang sesuai dengan nominal transfer.</div></div></div>
-          <div class="tip"><span class="icon">ðŸ˜ˆ</span><div><strong>Setelah bayar</strong><div style="color:#c6cad4">Masuk ke halaman status order untuk melihat apakah pesanan sudah diverifikasi.</div></div></div>
-        </div>
-      </section>
-    </div>
-  </div>
-  <div class="modal-backdrop" id="backdrop"></div>
-  <div class="modal" id="zoomModal">
-    <img src="$qris" alt="QRIS Zoom"/>
-    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-secondary" id="closeZoom" type="button">Tutup</button></div>
-  </div>
-  <script>
-    let ttl = $ttl_sec;
-    const ttlEl = document.getElementById('ttl');
-    function fmt(sec){ const m = String(Math.floor(sec/60)).padStart(2,'0'); const s = String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
-    function tick(){
-      ttlEl.textContent = fmt(Math.max(0, ttl));
-      if(ttl <= 0){ location.href = '/status/$order_id'; return; }
-      ttl -= 1;
-    }
-    tick(); setInterval(tick, 1000);
+  <div class="box">
+    <h1>Pembayaran QRIS</h1>
+    <div class="muted">Produk: <b>$product_name</b></div>
+    <div class="muted">Jumlah: <b>$qty</b></div>
 
-    function vibrate(){ if('vibrate' in navigator){ navigator.vibrate(20); } }
-    document.querySelectorAll('[data-copy]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        try{ await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent = 'Copied'; vibrate(); setTimeout(()=>btn.textContent='Copy',1100);}catch(e){}
-      });
-    });
-    const backdrop = document.getElementById('backdrop');
-    const modal = document.getElementById('zoomModal');
-    function openZoom(){ modal.classList.add('open'); backdrop.classList.add('open'); }
-    function closeZoom(){ modal.classList.remove('open'); backdrop.classList.remove('open'); }
-    document.getElementById('zoomBtn').addEventListener('click', openZoom);
-    document.getElementById('qrisImage').addEventListener('click', openZoom);
-    document.getElementById('closeZoom').addEventListener('click', closeZoom);
-    backdrop.addEventListener('click', closeZoom);
+    <div style="margin-top:12px;">Total transfer:</div>
+    <div class="total">Rp $total</div>
+    <div class="muted">Transfer sesuai nominal untuk verifikasi</div>
+
+    <div style="margin-top:14px;">Scan QRIS:</div>
+    <div class="qris"><img src="$qris" alt="QRIS"/></div>
+
+    <div class="oid">Order ID:<br><b>$order_id</b></div>
+
+    <div class="row">
+      <a class="btn" href="/status/$order_id">Cek Status</a>
+      <a class="btn" href="/" style="opacity:.9">Kembali</a>
+    </div>
+
+    <div class="muted" style="margin-top:12px;">
+      Catatan: order ini akan otomatis <b>cancel</b> jika belum dibayar dalam $ttl menit.
+    </div>
+  </div>
+
+  <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
+  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
+
+  <script>
+    // auto cek setelah bayar (supaya user tidak perlu klik)
+    async function poll(){
+      try{
+        const r = await fetch("/api/order/$order_id", {cache:"no-store"});
+        const j = await r.json();
+        if(!j || !j.ok) return;
+        if(j.status === "paid"){
+          const t=document.getElementById("toast");
+          t.classList.add("show");
+          setTimeout(()=>{window.location.href="/voucher/$order_id";}, 650);
+        }
+        if(j.status === "cancelled"){
+          // kalau sudah expired, arahkan ke status biar jelas
+          window.location.href="/status/$order_id";
+        }
+      }catch(e){}
+    }
+    setInterval(poll, 2000);
+    poll();
   </script>
 </body>
-</html>""")
+</html>
+""")
 
 STATUS_HTML = Template(r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Status Order â€” Impura</title>
+  <title>Status Order</title>
   <style>
-    :root{color-scheme:dark;--bg:#050506;--panel:#111217;--line:rgba(255,75,75,.18);--text:#f7f8fc;--muted:#c6cad4;--red:#ff2d55;--red2:#ff4b4b;--shadow:0 20px 70px rgba(0,0,0,.56),0 0 30px rgba(255,45,85,.14)}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at top left, rgba(255,45,85,.14), transparent 30%),linear-gradient(180deg,#050506,#0a0a0d);color:var(--text);min-height:100vh}
-    body::before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0, rgba(255,255,255,.02) 1px, transparent 3px, transparent 7px);opacity:.28}
-    .container{max-width:860px;margin:0 auto;padding:28px 18px 50px}.card{background:linear-gradient(180deg, rgba(17,18,23,.94), rgba(10,10,14,.9));border:1px solid var(--line);border-radius:28px;padding:24px;box-shadow:var(--shadow)}
-    .top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}.btn,.copy-btn{border:none;cursor:pointer;border-radius:14px;padding:12px 16px;font-weight:800;transition:.25s ease;text-decoration:none}
-    .btn{display:inline-flex;align-items:center;justify-content:center}.btn-primary{background:linear-gradient(135deg,#a8002a,var(--red2));color:#fff;box-shadow:0 0 26px rgba(255,45,85,.22)}.btn-secondary{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)}
-    h1{margin:0 0 8px;font-size:clamp(1.8rem,3vw,2.6rem)} p{margin:0;color:var(--muted);line-height:1.8}.grid{display:grid;gap:12px;margin-top:20px}.row{display:flex;justify-content:space-between;gap:14px;padding:15px 16px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.12)}
-    .badge{display:inline-flex;align-items:center;padding:10px 14px;border-radius:999px;background:$badge;background:linear-gradient(135deg,$badge,rgba(255,255,255,.14));font-weight:900;box-shadow:0 0 18px rgba(255,45,85,.18)}
-    .copyline{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.copy-btn{padding:8px 12px;background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,75,75,.18)}
-    .timer{font-size:1.1rem;font-weight:800;text-shadow:0 0 18px rgba(255,45,85,.24)}
+    :root{
+      --bg:#070c18; --glass:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.92); --muted:rgba(255,255,255,.70);
+      --g1:#22c55e; --shadow:0 18px 42px rgba(0,0,0,.45); --r:22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+      color:var(--text);
+      background:
+        radial-gradient(900px 520px at 20% -10%, rgba(255,43,43,.16), transparent 60%),
+        radial-gradient(900px 520px at 80% 0%, rgba(164,0,25,.15), transparent 55%),
+        var(--bg);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:26px 14px;
+    }
+    .box{
+      width:min(560px, 100%);
+      background:var(--glass);
+      border:1px solid var(--line);
+      border-radius:var(--r);
+      box-shadow:var(--shadow);
+      padding:22px;
+      text-align:center;
+      backdrop-filter: blur(12px);
+      position:relative; overflow:hidden;
+    }
+    .box:before{
+      content:""; position:absolute; inset:-2px;
+      background: radial-gradient(700px 260px at 30% 10%, rgba(56,189,248,.16), transparent 60%);
+      pointer-events:none;
+    }
+    h1{margin:0 0 8px; font-size:30px}
+    .muted{color:var(--muted); font-size:13px}
+    .badge{
+      display:inline-flex;align-items:center;gap:8px;
+      padding:10px 14px;
+      border-radius:999px;
+      font-weight:950;
+      letter-spacing:.5px;
+      background:linear-gradient(135deg, rgba(255,43,43,.96), rgba(164,0,25,.85));
+      color:#071016;
+      margin-top:10px;
+    }
+    .spin{
+      width:14px;height:14px;
+      border:2px solid rgba(255,255,255,.22);
+      border-top-color: rgba(255,255,255,.85);
+      border-radius:50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .grid{
+      margin-top:16px;
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:10px;
+    }
+    .mini{
+      background:rgba(255,255,255,.04);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:18px;
+      padding:12px;
+    }
+    .mini .t{font-size:12px;color:var(--muted)}
+    .mini .v{font-size:22px;font-weight:950;margin-top:4px}
+    .toast{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:18px; z-index:1000;
+      background:rgba(0,0,0,.55);
+      border:1px solid rgba(255,255,255,.12);
+      color:#fff;
+      padding:12px 14px;
+      border-radius:14px;
+      opacity:0; pointer-events:none;
+      transition: opacity .2s ease, transform .2s ease;
+      backdrop-filter: blur(10px);
+    }
+    .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+    .wa{
+      position:fixed; right:18px; bottom:18px; z-index:999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 16px;border-radius:999px;
+      background:linear-gradient(135deg, rgba(255,43,43,.95), rgba(164,0,25,.85));
+      color:#fff;text-decoration:none;font-weight:950;
+      box-shadow:0 14px 28px rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.12);
+    }
+    @media (max-width:520px){ .grid{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="top">
-      <a class="btn btn-secondary" href="/">â† Kembali</a>
-      <a class="btn btn-secondary" href="/cek-order">Cari Order Lain</a>
+  <div class="box">
+    <h1>Status Order</h1>
+    <div class="muted">Produk: <b>$pid</b></div>
+    <div class="muted">Jumlah: <b>$qty</b></div>
+    <div class="muted">Nominal: <b>Rp $amount</b></div>
+
+    <div class="badge"><span id="st">$st</span> <span class="spin" title="auto cek"></span></div>
+
+    <div class="grid">
+      <div class="mini">
+        <div class="t">Countdown verifikasi</div>
+        <div class="v" id="cd">--:--</div>
+      </div>
+      <div class="mini">
+        <div class="t">Auto cek</div>
+        <div class="v" id="tick">2s</div>
+      </div>
     </div>
-    <div class="card">
-      <h1>Status pesanan kamu</h1>
-      <p>Gunakan halaman ini untuk memantau pesanan. Kamu juga bisa menyalin Order ID dan nominal transfer dalam satu klik.</p>
-      <div style="margin-top:16px"><span class="badge">$st</span></div>
-      <div class="grid">
-        <div class="row"><span>Order ID</span><span class="copyline"><strong id="orderIdVal">$order_id</strong><button class="copy-btn" data-copy="$order_id">Copy</button></span></div>
-        <div class="row"><span>Produk</span><strong>$product_name</strong></div>
-        <div class="row"><span>Qty</span><strong>$qty</strong></div>
-        <div class="row"><span>Nominal transfer</span><span class="copyline"><strong id="amountVal">Rp $amount</strong><button class="copy-btn" data-copy="$amount_clean">Copy</button></span></div>
-        <div class="row"><span>Sisa waktu</span><span class="timer" id="ttl">00:00</span></div>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:20px">
-        <a class="btn btn-primary" href="/pay/$order_id">Lihat Halaman Bayar</a>
-        <a class="btn btn-secondary" href="$telegram_url" target="_blank" rel="noopener">Telegram Admin</a>
-      </div>
+
+    <div class="muted" style="margin-top:14px;">
+      Halaman ini akan otomatis redirect ke akun email setelah verifikasi.<br/>
+      Jika sudah bayar tapi lama, klik tombol Chat Admin di pojok kanan bawah untuk konfirmasi.
     </div>
   </div>
+
+  <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
+  <div id="toast" class="toast">Akun email berhasil dikirim ✅ Mengarahkan...</div>
+
   <script>
     let ttl = $ttl_sec;
-    const ttlEl = document.getElementById('ttl');
-    function fmt(sec){ const m = String(Math.floor(sec/60)).padStart(2,'0'); const s = String(sec%60).padStart(2,'0'); return `${m}:${s}`; }
-    function tick(){ ttlEl.textContent = fmt(Math.max(0, ttl)); if(ttl<=0) return; ttl -= 1; }
-    tick(); setInterval(tick,1000);
-    function vibrate(){ if('vibrate' in navigator){ navigator.vibrate(20); } }
-    document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async()=>{ try{ await navigator.clipboard.writeText(btn.dataset.copy); btn.textContent='Copied'; vibrate(); setTimeout(()=>btn.textContent='Copy',1100);}catch(e){} }));
+    let every = 2; // seconds
+    document.getElementById("tick").textContent = every + "s";
+
+    function fmt(sec){
+      sec = Math.max(0, sec|0);
+      const m = (sec/60)|0;
+      const s = sec%60;
+      return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+    }
+    function updateCd(){
+      document.getElementById("cd").textContent = fmt(ttl);
+      ttl = Math.max(0, ttl - 1);
+    }
+    setInterval(updateCd, 1000);
+    updateCd();
+
     async function poll(){
       try{
-        const res = await fetch('/api/order/$order_id');
-        const data = await res.json();
-        if(data.ok){
-          ttl = data.ttl_sec || 0;
-          if(data.status === 'paid'){
-            vibrate();
-            location.href = '/voucher/$order_id';
-          }
-          if(data.status === 'cancelled'){
-            location.reload();
-          }
+        const r = await fetch("/api/order/$order_id", {cache:"no-store"});
+        const j = await r.json();
+        if(!j || !j.ok) return;
+
+        if(j.status === "paid"){
+          const t=document.getElementById("toast");
+          t.classList.add("show");
+          setTimeout(()=>{window.location.href="/voucher/$order_id";}, 650);
+          return;
         }
+        if(j.status === "cancelled"){
+          document.getElementById("st").textContent = "CANCELLED";
+          return;
+        }
+        if(typeof j.ttl_sec === "number") ttl = j.ttl_sec;
       }catch(e){}
     }
-    setInterval(poll, 5000);
+    setInterval(poll, every*1000);
+    poll();
   </script>
 </body>
-</html>""")
-
-LOOKUP_HTML = Template(r"""<!doctype html>
-<html lang="id">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Cek Order â€” Impura</title>
-  <style>
-    :root{color-scheme:dark;--bg:#050506;--panel:#111217;--line:rgba(255,75,75,.18);--text:#f7f8fc;--muted:#c6cad4;--red:#ff2d55;--red2:#ff4b4b;--shadow:0 20px 70px rgba(0,0,0,.56),0 0 30px rgba(255,45,85,.14)}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at top left, rgba(255,45,85,.14), transparent 30%),linear-gradient(180deg,#050506,#0a0a0d);color:var(--text);min-height:100vh}
-    body::before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0, rgba(255,255,255,.02) 1px, transparent 3px, transparent 7px);opacity:.28}
-    .container{max-width:760px;margin:0 auto;padding:28px 18px 50px}.card{background:linear-gradient(180deg, rgba(17,18,23,.94), rgba(10,10,14,.9));border:1px solid var(--line);border-radius:28px;padding:24px;box-shadow:var(--shadow)}
-    .logo{width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,75,75,.4);box-shadow:0 0 26px rgba(255,45,85,.22)}
-    .top{display:flex;align-items:center;gap:14px;margin-bottom:18px}.eyebrow{display:inline-flex;padding:8px 14px;border-radius:999px;background:rgba(255,45,85,.12);border:1px solid rgba(255,75,75,.26);font-size:.76rem;letter-spacing:.18em;text-transform:uppercase}
-    h1{margin:14px 0 8px;font-size:clamp(1.9rem,3vw,2.8rem)} p{margin:0;color:var(--muted);line-height:1.8}.form{display:grid;gap:14px;margin-top:22px}.input{width:100%;background:#121318;color:#fff;border:1px solid rgba(255,75,75,.18);border-radius:18px;padding:16px;outline:none;font-size:1rem}.btn{border:none;cursor:pointer;border-radius:16px;padding:14px 18px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
-    .btn-primary{background:linear-gradient(135deg,#a8002a,var(--red2));color:#fff;box-shadow:0 0 26px rgba(255,45,85,.22)}.btn-secondary{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)}
-    .hint{padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.12);margin-top:16px;color:var(--muted)}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="card">
-      <div class="top"><img src="$logo_url" alt="Logo" class="logo"/><div><span class="eyebrow">Order Lookup</span><h1>Cek status pesanan dengan Order ID</h1></div></div>
-      <p>Masukkan Order ID yang kamu dapat setelah checkout. Sistem akan langsung mengarahkan ke halaman status pesanan.</p>
-      <form class="form" method="get" action="/cek-order">
-        <input class="input" type="text" name="order_id" placeholder="Contoh: 1e4b0f4a-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="$existing_order_id" required/>
-        <button class="btn btn-primary" type="submit">Cek Status</button>
-      </form>
-      <div class="hint">Tips: gunakan tombol Copy di halaman pembayaran agar Order ID mudah disalin tanpa salah.</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px">
-        <a class="btn btn-secondary" href="/">Kembali ke Beranda</a>
-        <a class="btn btn-secondary" href="$telegram_url" target="_blank" rel="noopener">Hubungi Admin</a>
-      </div>
-      $lookup_error
-    </div>
-  </div>
-</body>
-</html>""")
+</html>
+""")
 
 VOUCHER_HTML = Template(r"""<!doctype html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Detail Akun â€” Impura</title>
+  <title>Akun Akses</title>
   <style>
-    :root{color-scheme:dark;--bg:#050506;--panel:#111217;--line:rgba(255,75,75,.18);--text:#f7f8fc;--muted:#c6cad4;--red:#ff2d55;--red2:#ff4b4b;--shadow:0 20px 70px rgba(0,0,0,.56),0 0 30px rgba(255,45,85,.14)}
-    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,sans-serif;background:radial-gradient(circle at top left, rgba(255,45,85,.14), transparent 30%),linear-gradient(180deg,#050506,#0a0a0d);color:var(--text);min-height:100vh}
-    body::before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom, rgba(255,255,255,.02) 0, rgba(255,255,255,.02) 1px, transparent 3px, transparent 7px);opacity:.28}
-    .container{max-width:880px;margin:0 auto;padding:28px 18px 50px}.card{background:linear-gradient(180deg, rgba(17,18,23,.94), rgba(10,10,14,.9));border:1px solid var(--line);border-radius:28px;padding:24px;box-shadow:var(--shadow)}
-    .code{margin-top:18px;padding:18px;border-radius:20px;background:rgba(255,255,255,.03);border:1px solid rgba(255,75,75,.14);white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:1rem;line-height:1.8}.btn{border:none;cursor:pointer;border-radius:16px;padding:14px 18px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn-primary{background:linear-gradient(135deg,#a8002a,var(--red2));color:#fff;box-shadow:0 0 26px rgba(255,45,85,.22)}.btn-secondary{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)}
+    :root{
+      --bg:#070c18; --glass:rgba(255,255,255,.06); --line:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.92); --muted:rgba(255,255,255,.70);
+      --g1:#22c55e; --shadow:0 18px 42px rgba(0,0,0,.45); --r:22px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+      color:var(--text);
+      background:
+        radial-gradient(900px 520px at 20% -10%, rgba(255,43,43,.16), transparent 60%),
+        radial-gradient(900px 520px at 80% 0%, rgba(164,0,25,.15), transparent 55%),
+        var(--bg);
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:26px 14px;
+    }
+    .box{
+      width:min(560px, 100%);
+      background:var(--glass);
+      border:1px solid var(--line);
+      border-radius:var(--r);
+      box-shadow:var(--shadow);
+      padding:22px;
+      text-align:center;
+      backdrop-filter: blur(12px);
+      position:relative; overflow:hidden;
+    }
+    .box:before{
+      content:""; position:absolute; inset:-2px;
+      background: radial-gradient(700px 260px at 30% 10%, rgba(56,189,248,.16), transparent 60%);
+      pointer-events:none;
+    }
+    h1{margin:0 0 8px; font-size:30px}
+    .muted{color:var(--muted); font-size:13px}
+    .code{
+      margin:16px auto 12px;
+      background:rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.12);
+      padding:14px 12px;
+      border-radius:16px;
+      font-size:18px;
+      font-weight:950;
+      letter-spacing:.4px;
+      word-break:break-all;
+      white-space:pre-wrap;
+      position:relative;
+    }
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;gap:8px;
+      padding:12px 16px;border-radius:14px;
+      background:linear-gradient(135deg, rgba(34,197,94,.95), rgba(34,197,94,.78));
+      color:#fff;
+      border:1px solid rgba(255,255,255,.12);
+      font-weight:950;
+      cursor:pointer;
+      box-shadow: 0 14px 28px rgba(34,197,94,.14);
+      transition: transform .18s ease, filter .18s ease;
+    }
+    .btn:hover{transform: translateY(-2px); filter:brightness(1.05)}
+    .success{
+      display:inline-flex;align-items:center;gap:10px;
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:999px;
+      background:rgba(34,197,94,.10);
+      border:1px solid rgba(164,0,25,.15);
+      color:rgba(255,255,255,.92);
+      font-weight:900;
+      animation: pop .6s ease both;
+    }
+    @keyframes pop{from{transform:scale(.96);opacity:0} to{transform:scale(1);opacity:1}}
+    .wa{
+      position:fixed; right:18px; bottom:18px; z-index:999;
+      display:flex;align-items:center;gap:10px;
+      padding:14px 16px;border-radius:999px;
+      background:linear-gradient(135deg, rgba(255,43,43,.95), rgba(164,0,25,.85));
+      color:#fff;text-decoration:none;font-weight:950;
+      box-shadow:0 14px 28px rgba(0,0,0,.35);
+      border:1px solid rgba(255,255,255,.12);
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <h1 style="margin:0 0 8px">Pembayaran berhasil âœ…</h1>
-      <p style="margin:0;color:#c6cad4;line-height:1.8">Berikut detail akun untuk produk <strong style="color:#fff">$pid_name</strong>. Simpan data ini baik-baik.</p>
-      <div class="code" id="voucherBox">$code</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px">
-        <button class="btn btn-primary" id="copyVoucher" type="button">Salin email</button>
-        <a class="btn btn-secondary" href="/">Kembali ke Beranda</a>
-      </div>
-      <div class="warn"><strong>Penting:</strong> Jangan gunakan temp mail/number untuk pemulihan, gunakan email/nomor asli untuk pemulihan. Kalau masih ngeyel dan akun kena verif, kami tidak tanggung jawab.</div>
+  <div class="box">
+    <h1>Akun Email</h1>
+    <div class="muted">Status: <b>PAID ✅</b></div>
+    <div class="muted">Produk: <b>$pid</b></div>
+
+    <div class="success">✅ Akun email berhasil dikirim</div>
+
+    <div class="code" id="vcode">$code</div>
+
+    <script>
+btn.onclick = async () => {
+  const text = code;
+
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+  } else {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+
+  btn.innerText="✅ Tersalin";
+  setTimeout(()=>btn.innerText="Salin Email",1500);
+};
+</script>
+
+    <div class="muted" style="margin-top:12px;">
+      Jangan gunakan temp mail/number untuk pemulihan, gunakan email/nomor asli untuk pemulihan. Kalau masih ngeyel dan akun kena verif, saya tidak tanggung jawab
     </div>
   </div>
-  <script>
-    document.getElementById('copyVoucher').addEventListener('click', async()=>{
-      try{ await navigator.clipboard.writeText(document.getElementById('voucherBox').innerText); if('vibrate' in navigator){navigator.vibrate(25);} document.getElementById('copyVoucher').textContent='Tersalin'; setTimeout(()=>document.getElementById('copyVoucher').textContent='Salin Semua',1100);}catch(e){}
-    });
-  </script>
+
+  <a class="wa" href="https://wa.me/6281317391284" target="_blank" rel="noreferrer">💬 Chat Admin</a>
 </body>
-</html>""")
+</html>
+""")
 
 ADMIN_HTML = Template(r"""<!doctype html>
-<html lang="id"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Admin Impura</title>
-<style>
-body{margin:0;font-family:Inter,system-ui,sans-serif;background:#08090c;color:#fff}.wrap{max-width:1100px;margin:0 auto;padding:26px 18px}.row{display:flex;justify-content:space-between;gap:12px;padding:18px;border-radius:18px;background:#111217;border:1px solid rgba(255,75,75,.18);margin-bottom:14px}.muted{color:#aab1be;font-size:.92rem}.vbtn,.lbtn{border:none;text-decoration:none;cursor:pointer;border-radius:14px;padding:12px 14px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}.vbtn{background:linear-gradient(135deg,#a8002a,#ff4b4b);color:#fff}.lbtn{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)}
-</style></head><body><div class="wrap"><h1>Admin Panel</h1>$items</div></body></html>""")
+<html lang="id">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Admin Panel</title>
+  <style>
+    body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;background:#070c18;color:#fff;padding:20px}
+    .box{max-width:980px;margin:0 auto}
+    .row{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:14px;border-radius:16px;margin-bottom:10px;display:flex;gap:12px;align-items:center;justify-content:space-between;backdrop-filter: blur(10px)}
+    .muted{opacity:.75;font-size:12px;word-break:break-all}
+    .vbtn{background:#22c55e;border:none;color:#fff;padding:10px 12px;border-radius:12px;cursor:pointer;font-weight:950}
+    .lbtn{display:inline-block;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:white;padding:10px 12px;border-radius:12px;text-decoration:none;font-weight:950}
+    .act{min-width:260px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+    @media(max-width:740px){.row{flex-direction:column;align-items:flex-start}.act{align-items:flex-start;min-width:unset;width:100%}}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2 style="margin:0 0 10px;">Admin Panel</h2>
+    <div style="opacity:.75;margin-bottom:12px;">
+      Klik tombol untuk verifikasi + otomatis assign akun email lalu redirect ke halaman akun email.
+    </div>
+    $items
+  </div>
+</body>
+</html>
+""")
 
-
+# ======================
+# ROUTES
+# ======================
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+def home():
     stock = get_stock_map()
-    stats = get_sales_stats()
-    cards = build_home_cards(stock, stats)
-    vis_count = _VISITOR_BASE + max(1, len(_VISITOR_SESS))
-    html = _tpl_render(
-        HOME_HTML,
-        cards=cards,
-        year=now_utc().year,
-        faq_items=build_faq_items(),
-        logo_url=LOGO_URL,
-        wa_url=WHATSAPP_URL,
-        telegram_url=TELEGRAM_URL,
-        hero_sold=f"{stats['total_success']:,}",
-        hero_active=f"{stats['active_users']:,}",
-        hero_today=f"{max(stats['today_success'], _TODAY_SUCCESS_BASE + stats['today_success']):,}",
-        hero_visitors=f"{vis_count:,}",
-        product_json=json.dumps({pid: {"stock": int(stock.get(pid, 0)), "price": int(p["price"])} for pid, p in PRODUCTS.items()}),
-    )
-    return HTMLResponse(html)
+    cards = ""
+    for pid, p in PRODUCTS.items():
+        stok = int(stock.get(pid, 0))
+        stok_txt = f"Stok: {stok} tersedia"
+        feats = (PRODUCT_FEATS.get(pid) or p.get("features") or DEFAULT_FEATURES)
+        feats_html = "".join([f'<div class="feat"><i>✓</i><span>{f}</span></div>' for f in feats])
+        hot = '<span class="hot">🔥 TERLARIS</span>' if pid == "gemini" else ""
+        disabled_attr = "disabled aria-disabled='true'" if stok <= 0 else ""
+        disabled_btn = "disabled" if stok <= 0 else ""
 
+        cards += f"""
+          <div class="p reveal" data-product="{pid}" data-stock="{stok}">
+            <div class="card-top">
+              <div>
+                <div class="ptitle">{p["name"]}</div>
+                <div class="psub" id="stock-{pid}">{stok_txt}</div>
+              </div>
+              <div>{hot}</div>
+            </div>
+
+            <div class="price">Rp {rupiah(int(p["price"]))}<small>/ Akun</small></div>
+            <div class="feats">{feats_html}</div>
+
+            <div class="buyrow">
+              <div class="qtybox">
+                <button class="qtybtn qty-minus" type="button" {disabled_btn}>-</button>
+                <span class="qtyval">1</span>
+                <button class="qtybtn qty-plus" type="button" {disabled_btn}>+</button>
+              </div>
+
+              <button class="btn primary buybtn" type="button" data-buy="{pid}" {disabled_attr}>
+                Beli Sekarang
+              </button>
+            </div>
+
+            <div class="note">{("Stok habis, tombol beli dinonaktifkan." if stok <= 0 else "Bayar QRIS → tunggu verifikasi → akun email terkirim secara otomatis.")}</div>
+          </div>
+        """
+    html = _tpl_render(HOME_HTML, cards=cards, year=now_utc().year, logo=LOGO_IMAGE_URL)
+    return HTMLResponse(html)
 
 @app.get("/checkout/{product_id}")
 def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)):
+    """
+    Buat order pending + nominal unik.
+    FIX: setelah dibuat, redirect ke /pay/{order_id} supaya refresh tidak bikin order baru.
+    Juga pakai cookie untuk lock order per produk (anti dobel).
+    """
     if product_id not in PRODUCTS:
         return HTMLResponse("<h3>Produk tidak ditemukan</h3>", status_code=404)
+
     ip = _client_ip(request)
     if not _rate_limit_checkout(ip):
         return HTMLResponse("<h3>Terlalu banyak request</h3><p>Coba lagi beberapa menit.</p>", status_code=429)
+
+    # lock by cookie: kalau masih ada pending order yang belum expired, pakai itu
     cookie_key = f"oid_{product_id}"
     oid = request.cookies.get(cookie_key)
     if oid:
@@ -1162,168 +1621,165 @@ def checkout(product_id: str, request: Request, qty: int = Query(1, ge=1, le=99)
                     return RedirectResponse(url=f"/pay/{oid}", status_code=302)
         except Exception:
             pass
+
+    # cek stok realtime (berdasarkan voucher yang available)
     stock_map = get_stock_map()
     stock = int(stock_map.get(product_id, 0))
     if stock <= 0:
         return HTMLResponse("<h3>Stok habis</h3>", status_code=400)
+
     if qty > stock:
         qty = stock
+
     base_price = int(PRODUCTS[product_id]["price"])
     unique_code = random.randint(101, 999)
+    # total = (harga * qty) + kode unik
     total = (base_price * int(qty)) + unique_code
+
     order_id = str(uuid.uuid4())
     created_at = now_utc().isoformat()
-    ins = supabase.table("orders").insert({
-        "id": order_id,
-        "product_id": product_id,
-        "qty": int(qty),
-        "unit": int(base_price),
-        "amount_idr": int(total),
-        "status": "pending",
-        "created_at": created_at,
-        "voucher_code": None,
-    }).execute()
+
+    ins = supabase.table("orders").insert(
+        {
+            "id": order_id,
+            "product_id": product_id,
+            "qty": int(qty),
+            "unit": int(base_price),
+            "amount_idr": int(total),
+            "status": "pending",
+            "created_at": created_at,
+            "voucher_code": None,
+        }
+    ).execute()
+
     if not ins.data:
         return HTMLResponse("<h3>Gagal membuat order</h3><p>Cek RLS / key / schema orders.</p>", status_code=500)
+
     resp = RedirectResponse(url=f"/pay/{order_id}", status_code=302)
+    # cookie lock 15 menit
     resp.set_cookie(cookie_key, order_id, max_age=ORDER_TTL_MINUTES * 60, httponly=True, samesite="lax")
     return resp
-
 
 @app.get("/pay/{order_id}", response_class=HTMLResponse)
 def pay(order_id: str):
     res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
+
     order = res.data[0]
     order, _ = _ensure_not_expired(order)
+
     st = (order.get("status") or "pending").lower()
     if st == "paid":
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=302)
     if st == "cancelled":
         return HTMLResponse("<h3>Order sudah expired</h3><p>Silakan buat order baru dari halaman utama.</p>", status_code=410)
+
     pid = order.get("product_id", "")
     amount = int(order.get("amount_idr") or 0)
     qty = int(order.get("qty") or 1)
     unit = int(order.get("unit") or PRODUCTS.get(pid, {}).get("price", 0) or 0)
     subtotal = unit * qty
     product_name = PRODUCTS.get(pid, {}).get("name", pid)
-    created = _parse_dt(order.get("created_at", "")) or now_utc()
-    ttl_sec = max(0, int(ORDER_TTL_MINUTES * 60 - (now_utc() - created).total_seconds()))
-    html = _tpl_render(
-        PAY_HTML,
+
+    html = _tpl_render(PAY_HTML, 
         product_name=product_name,
         qty=str(qty),
         unit=rupiah(unit),
         subtotal=rupiah(subtotal),
         total=rupiah(amount),
-        total_clean=str(amount),
         qris=QR_IMAGE_URL,
         order_id=order_id,
-        ttl=str(ORDER_TTL_MINUTES),
-        ttl_sec=str(ttl_sec),
-        logo_url=LOGO_URL,
-        telegram_url=TELEGRAM_URL,
+        ttl=ORDER_TTL_MINUTES,
     )
     return HTMLResponse(html)
-
 
 @app.get("/status/{order_id}", response_class=HTMLResponse)
 def status(order_id: str):
     res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
+
     order = res.data[0]
     order, _ = _ensure_not_expired(order)
+
     st = (order.get("status") or "pending").lower()
     if st == "paid":
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=302)
+
     amount = int(order.get("amount_idr") or 0)
     pid = order.get("product_id", "")
     qty = int(order.get("qty") or 1)
+
     badge = "#f59e0b" if st == "pending" else "#ef4444"
+    # TTL seconds left
     created = _parse_dt(order.get("created_at", "")) or now_utc()
     ttl_sec = max(0, int(ORDER_TTL_MINUTES * 60 - (now_utc() - created).total_seconds()))
-    html = _tpl_render(
-        STATUS_HTML,
+
+    html = _tpl_render(STATUS_HTML, 
+        pid=pid,
         qty=str(qty),
         amount=rupiah(amount),
-        amount_clean=str(amount),
         st=st.upper(),
         badge=badge,
         order_id=order_id,
         ttl_sec=str(ttl_sec),
-        product_name=PRODUCTS.get(pid, {}).get("name", pid),
-        telegram_url=TELEGRAM_URL,
     )
     return HTMLResponse(html)
-
-
-@app.get("/cek-order", response_class=HTMLResponse)
-def lookup(order_id: Optional[str] = None):
-    if order_id:
-        return RedirectResponse(url=f"/status/{order_id.strip()}", status_code=302)
-    html = _tpl_render(
-        LOOKUP_HTML,
-        logo_url=LOGO_URL,
-        existing_order_id="",
-        lookup_error="",
-        telegram_url=TELEGRAM_URL,
-    )
-    return HTMLResponse(html)
-
 
 @app.get("/voucher/{order_id}", response_class=HTMLResponse)
 def voucher(order_id: str):
     res = supabase.table("orders").select("status,product_id,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return HTMLResponse("<h3>Order tidak ditemukan</h3>", status_code=404)
+
     order = res.data[0]
     if (order.get("status") or "").lower() != "paid":
         return HTMLResponse("<h3>Belum diverifikasi admin</h3><p>Silakan tunggu.</p>", status_code=400)
+
     code = order.get("voucher_code")
     if not code:
-        return HTMLResponse("<html><body style='font-family:Arial;background:#07070b;color:white;text-align:center;padding:40px'><h2>Akun Email</h2><p>Status: PAID âœ…</p><p style='opacity:.8'>Maaf, stok untuk produk ini sedang habis.</p></body></html>")
-    html = _tpl_render(VOUCHER_HTML, pid_name=PRODUCTS.get(order.get("product_id"), {}).get("name", order.get("product_id")), code=code)
+        return HTMLResponse("""
+        <html><body style="font-family:Arial;background:#070c18;color:white;text-align:center;padding:40px">
+          <h2>Akun Email</h2>
+          <p>Status: PAID ✅</p>
+          <p style="opacity:.8">Maaf, stok untuk produk ini sedang habis.</p>
+        </body></html>
+        """)
+
+    html = _tpl_render(VOUCHER_HTML, pid=order.get("product_id"), code=code)
     return HTMLResponse(html)
 
-
+# ======================
+# API
+# ======================
 @app.get("/api/order/{order_id}")
 def api_order(order_id: str):
     res = supabase.table("orders").select("*").eq("id", order_id).limit(1).execute()
     if not res.data:
         return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+
     order = res.data[0]
     order, _ = _ensure_not_expired(order)
+
     st = (order.get("status") or "pending").lower()
     created = _parse_dt(order.get("created_at", "")) or now_utc()
     ttl_sec = max(0, int(ORDER_TTL_MINUTES * 60 - (now_utc() - created).total_seconds()))
-    return {"ok": True, "status": st, "ttl_sec": ttl_sec}
 
+    return {"ok": True, "status": st, "ttl_sec": ttl_sec}
 
 @app.get("/api/stock")
 def api_stock():
     return {"ok": True, "stock": get_stock_map()}
 
-
-@app.get("/api/stats")
-def api_stats():
-    stats = get_sales_stats()
-    return {
-        "ok": True,
-        "sold": stats["sold"],
-        "total_success": stats["total_success"],
-        "today_success": max(stats["today_success"], _TODAY_SUCCESS_BASE + stats["today_success"]),
-        "active_users": stats["active_users"],
-    }
-
-
 @app.get("/api/visitors")
 def api_visitors(request: Request):
+    # visitor counter: unique by cookie session
     sid = request.cookies.get("vis_sid")
     if not sid:
         sid = str(uuid.uuid4())
     t = time.time()
+    # expire old
     for k, v in list(_VISITOR_SESS.items()):
         if t - v > 45:
             _VISITOR_SESS.pop(k, None)
@@ -1333,11 +1789,14 @@ def api_visitors(request: Request):
     resp.set_cookie("vis_sid", sid, max_age=24*3600, httponly=True, samesite="lax")
     return resp
 
-
+# ======================
+# ADMIN PANEL
+# ======================
 @app.get("/admin", response_class=HTMLResponse)
 def admin(token: Optional[str] = None):
     if not require_admin(token):
         return HTMLResponse("<h3>Unauthorized</h3>", status_code=401)
+
     res = (
         supabase.table("orders")
         .select("id,product_id,qty,unit,amount_idr,status,created_at,voucher_code")
@@ -1346,6 +1805,7 @@ def admin(token: Optional[str] = None):
         .execute()
     )
     rows = res.data or []
+
     items = ""
     if not rows:
         items = "<div style='opacity:.75'>Belum ada order</div>"
@@ -1358,32 +1818,65 @@ def admin(token: Optional[str] = None):
             qty = int(o.get("qty") or 1)
             created = o.get("created_at", "")
             vcode = o.get("voucher_code")
+
             if st == "pending":
-                action = f"<form method='post' action='/admin/verify/{oid}?token={token}' style='margin:0;'><button class='vbtn' type='submit'>VERIFIKASI + KIRIM VOUCHER</button></form><div class='muted'>Auto-cancel: {ORDER_TTL_MINUTES} menit</div>"
+                action = f"""
+                <form method="post" action="/admin/verify/{oid}?token={token}" style="margin:0;">
+                  <button class="vbtn" type="submit">VERIFIKASI + KIRIM VOUCHER</button>
+                </form>
+                <div class="muted">Auto-cancel: {ORDER_TTL_MINUTES} menit</div>
+                """
             elif st == "paid":
                 label = f"Voucher: {vcode}" if vcode else "Voucher: (habis / belum ada)"
-                action = f"<a class='lbtn' href='/voucher/{oid}'>Buka Akun Email</a><div class='muted'>{label}</div>"
+                action = f"""
+                <a class="lbtn" href="/voucher/{oid}">Buka Akun Email</a>
+                <div class="muted">{label}</div>
+                """
             else:
-                action = f"<div class='muted'>Status: {st.upper()}</div><a class='lbtn' href='/pay/{oid}'>Buka Pay</a>"
-            items += f"<div class='row'><div><div><b>{PRODUCTS.get(pid, {}).get('name', pid)}</b> â€” Qty {qty} â€” Rp {rupiah(amt)}</div><div class='muted'>ID: {oid}</div><div class='muted'>{created}</div><div class='muted'>Status: {st}</div></div><div>{action}</div></div>"
-    return HTMLResponse(_tpl_render(ADMIN_HTML, items=items))
+                action = f"""
+                <div class="muted">Status: {st.upper()}</div>
+                <a class="lbtn" href="/pay/{oid}">Buka Pay</a>
+                """
 
+            items += f"""
+            <div class="row">
+              <div class="col">
+            <div><b>{pid}</b> — Qty {qty} — Rp {rupiah(amt)}</div>
+                <div class="muted">ID: {oid}</div>
+                <div class="muted">{created}</div>
+                <div class="muted">Status: {st}</div>
+              </div>
+              <div class="act">{action}</div>
+            </div>
+            """
+
+    return HTMLResponse(_tpl_render(ADMIN_HTML, items=items))
 
 @app.post("/admin/verify/{order_id}")
 def admin_verify(order_id: str, token: Optional[str] = None):
     if not require_admin(token):
         return PlainTextResponse("Unauthorized", status_code=401)
+
     res = supabase.table("orders").select("id,product_id,qty,status,voucher_code").eq("id", order_id).limit(1).execute()
     if not res.data:
         return PlainTextResponse("Order not found", status_code=404)
+
     order = res.data[0]
     pid = order.get("product_id")
     st = (order.get("status") or "pending").lower()
     vcode = order.get("voucher_code")
+
+    # kalau sudah paid dan voucher sudah ada
     if st == "paid" and vcode:
         return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
+
+    # kalau expired/cancelled
     if st == "cancelled":
         return HTMLResponse("<h3>Order sudah cancelled/expired</h3>", status_code=410)
+
+    # assign voucher sesuai qty (sekali klik). fungsi ini juga akan set status order = paid.
     qty = int(order.get("qty") or 1)
     claim_vouchers_for_order(order_id, pid, qty)
+
+    # redirect buyer ke voucher (atau halaman voucher akan bilang stok habis)
     return RedirectResponse(url=f"/voucher/{order_id}", status_code=303)
