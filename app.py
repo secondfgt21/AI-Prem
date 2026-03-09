@@ -338,16 +338,6 @@ def build_home_cards(stock: dict, stats: dict) -> str:
 HOME_HTML = Template(r"""<!doctype html>
 <html lang="id">
 <head>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-YGSFDD04M4"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-YGSFDD04M4');
-</script>
-
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Impura â€” AI Premium Store</title>
