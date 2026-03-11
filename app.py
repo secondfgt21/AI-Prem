@@ -31,8 +31,8 @@ def _tpl_render(tpl, **kw) -> str:
 
 PRODUCTS = {
     "gemini": {
-        "name": "Gemini AI Pro 1 Tahun",
-        "price": 34_000,
+        "name": "Gemini AI Pro 3/4 Bulan",
+        "price": 29_xxx,
         "features": [
             "Akses penuh Gemini AI Pro",
             "Google Drive 2TB",
@@ -42,7 +42,7 @@ PRODUCTS = {
     },
     "chatgpt": {
         "name": "ChatGPT Plus 1 Bulan",
-        "price": 14_000,
+        "price": 14_xxx,
         "features": [
             "Akses model ChatGPT terbaru",
             "Respons lebih cepat & akurat",
@@ -272,6 +272,7 @@ FAQ_ITEMS = [
     ("Kalau sudah bayar tapi status belum berubah bagaimana?", "Tunggu beberapa saat sambil tetap membuka halaman status. Jika masih pending, hubungi admin lewat WhatsApp atau Telegram dan kirim Order ID kamu."),
     ("Apakah stok produk tampil real-time?", "Ya. Halaman produk menampilkan stok tersedia dan jumlah produk terjual yang diperbarui berkala dari sistem order."),
     ("Berapa lama order aktif sebelum expired?", "Order akan otomatis dibatalkan jika belum dibayar dalam 15 menit, jadi sebaiknya langsung selesaikan pembayaran setelah checkout."),
+    ("Apa akun bergaransi?", "Setiap akun mendapatkan garansi 1 (satu) bulan / sampai event berakhir dan garansi hanya diganti dengan akun lain, tidak menerima garansi uang kembali."),
 ]
 
 @app.get("/", response_class=HTMLResponse)
