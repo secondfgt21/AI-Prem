@@ -32,7 +32,7 @@ def _tpl_render(tpl, **kw) -> str:
 PRODUCTS = {
     "gemini": {
         "name": "Gemini AI Pro 3/4 Bulan",
-        "price": 29_xxx,
+        "price": 29_000,
         "features": [
             "Akses penuh Gemini AI Pro",
             "Google Drive 2TB",
@@ -42,7 +42,7 @@ PRODUCTS = {
     },
     "chatgpt": {
         "name": "ChatGPT Plus 1 Bulan",
-        "price": 14_xxx,
+        "price": 14_000,
         "features": [
             "Akses model ChatGPT terbaru",
             "Respons lebih cepat & akurat",
