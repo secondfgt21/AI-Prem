@@ -293,6 +293,10 @@ def home():
     html = _tpl_render(HOME_HTML, cards=cards, year=now_utc().year, logo=LOGO_IMAGE_URL, total_sold=total_sold, whatsapp=WHATSAPP_URL)
     return HTMLResponse(html)
 
+@app.get("/ping")
+def ping():
+    return {"ok": True}
+
 @app.get("/faq", response_class=HTMLResponse)
 def faq_page():
     faq_items = "".join([f'<div class="faq-item"><h3>{q}</h3><p>{a}</p></div>' for q, a in FAQ_ITEMS])
