@@ -294,8 +294,9 @@ def home():
     return HTMLResponse(html)
 
 @app.get("/ping")
+@app.head("/ping")
 def ping():
-    return {"ok": True}
+    return JSONResponse({"status": "ok"})
 
 @app.get("/faq", response_class=HTMLResponse)
 def faq_page():
